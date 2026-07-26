@@ -41,16 +41,6 @@ class PrayerAlarmScheduler {
       DateTime prayerTime = prayer['time'] as DateTime;
       String timeStr = DateFormat('HH:mm').format(prayerTime);
 
-      // Check if adhan is enabled for this prayer
-      bool isEnabled = prefs.getBool('adhan_enabled_$name') ?? true;
-      if (!isEnabled) {
-        print('⏭️ Skipping $name - adhan disabled');
-        continue;
-      }
-
-      // Get selected sound for this prayer
-      String soundName = prefs.getString('adhan_sound_$name') ?? 'adhan1';
-
       // Build scheduled DateTime for today
       var scheduledTime = DateTime(
         now.year,
@@ -65,11 +55,23 @@ class PrayerAlarmScheduler {
         scheduledTime = scheduledTime.add(const Duration(days: 1));
       }
 
-      // Store prayer info + trigger timestamp (native side reads these with 'flutter.' prefix)
+      // Store prayer info + trigger timestamp (native side + widget read these with
+      // 'flutter.' prefix) for every prayer, even if adhan is disabled — the widget
+      // still needs to show and track this prayer's time.
       await prefs.setString('prayer_${id}_name', name);
       await prefs.setString('prayer_${id}_time', timeStr);
-      await prefs.setString('adhan_sound_$name', soundName);
       await prefs.setInt('prayer_${id}_trigger_millis', scheduledTime.millisecondsSinceEpoch);
+
+      // Check if adhan is enabled for this prayer
+      bool isEnabled = prefs.getBool('adhan_enabled_$name') ?? true;
+      if (!isEnabled) {
+        print('⏭️ Skipping $name sound alarm - adhan disabled');
+        continue;
+      }
+
+      // Get selected sound for this prayer
+      String soundName = prefs.getString('adhan_sound_$name') ?? 'adhan1';
+      await prefs.setString('adhan_sound_$name', soundName);
 
       // Schedule 4-minute reminder notification before each prayer
       final reminderTime = scheduledTime.subtract(const Duration(minutes: 4));
@@ -91,6 +93,16 @@ class PrayerAlarmScheduler {
         // Fallback: schedule Flutter notification WITH sound
         await _scheduleLocalNotification(id, name, timeStr, scheduledTime, soundName, withSound: true);
       }
+    }
+
+    // Ask the native side to (re)derive alarms from the prefs we just wrote. This is
+    // also what schedules the silent per-prayer widget-refresh alarms, so the home
+    // screen widget re-renders exactly when each prayer's time arrives instead of only
+    // on app open / boot / the nightly worker.
+    try {
+      await _channel.invokeMethod('rescheduleFromPrefs');
+    } catch (e) {
+      print('⚠️ Failed to reschedule widget refresh alarms: $e');
     }
 
     // Start the persistent countdown notification

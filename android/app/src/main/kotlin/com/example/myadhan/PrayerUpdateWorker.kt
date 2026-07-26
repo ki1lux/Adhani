@@ -163,13 +163,6 @@ class PrayerUpdateWorker(
         for (prayer in PRAYER_MAP) {
             val timeStr = timeMap[prayer.apiField] ?: continue
 
-            // Check if adhan is enabled for this prayer
-            val isEnabled = prefs.getBoolean("flutter.adhan_enabled_${prayer.arabicName}", true)
-            if (!isEnabled) {
-                Log.d(TAG, "⏭️ Skipping ${prayer.arabicName} — adhan disabled")
-                continue
-            }
-
             // Parse "HH:mm" → epoch millis for today
             val parts = timeStr.split(":")
             if (parts.size != 2) continue
@@ -188,6 +181,9 @@ class PrayerUpdateWorker(
                 cal.add(Calendar.DAY_OF_YEAR, 1)
             }
 
+            // Always store name/time/trigger, even if adhan is disabled for this prayer —
+            // the widget still needs to display and track it. AlarmSchedulerHelper is what
+            // decides whether to actually arm the sound alarm based on the enabled flag.
             editor.putString("flutter.prayer_${prayer.id}_name", prayer.arabicName)
             editor.putString("flutter.prayer_${prayer.id}_time", timeStr)
             editor.putLong("flutter.prayer_${prayer.id}_trigger_millis", cal.timeInMillis)
