@@ -17,6 +17,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:intl/date_symbol_data_local.dart';
 
 class FadeTransitionBuilder extends PageTransitionsBuilder {
   const FadeTransitionBuilder();
@@ -38,6 +39,7 @@ class FadeTransitionBuilder extends PageTransitionsBuilder {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
+  await initializeDateFormatting();
 
   // Register native daily prayer worker (replaces Flutter WorkManager)
   const channel = MethodChannel('com.myadhan/notification');
@@ -163,6 +165,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        fontFamily: 'cairo',
         scaffoldBackgroundColor: const Color(0xff0A2239),
         canvasColor: const Color(0xff0A2239),
         pageTransitionsTheme: const PageTransitionsTheme(

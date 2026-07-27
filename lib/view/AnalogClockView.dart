@@ -2,72 +2,56 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:myadhan/controller/ClockController.dart';
 import 'package:myadhan/model/ClockModel.dart';
-import 'package:intl/intl.dart';
 
+/// A purely decorative analog clock face. The digital time is not rendered
+/// here — a parent renders its own accessible time text via [onTick], so
+/// screen readers get one clear spoken time instead of two competing ones.
 class Analogclockview extends StatefulWidget {
-  const Analogclockview({super.key});
+  final double size;
+  final ValueChanged<DateTime>? onTick;
+
+  const Analogclockview({super.key, required this.size, this.onTick});
 
   @override
   _AnalogclockviewState createState() => _AnalogclockviewState();
 }
 
 class _AnalogclockviewState extends State<Analogclockview> {
-
-  DateTime time = DateTime.now();
-  late String timeAfterReform = DateFormat('h:mm a').format(time);
   late ClockModel model;
   late ClockController controller;
-
-
 
   @override
   void initState() {
     super.initState();
+    model = ClockModel(DateTime.now());
     controller = ClockController(
       onTick: (newModel) {
-        // Check if widget is still mounted before calling setState
-        if (mounted) {
-          setState(() {
-            model = ClockModel(DateTime.now());
-            time = DateTime.now();
-            timeAfterReform = DateFormat('h:mm a').format(time);
-          });
-        }
+        if (!mounted) return;
+        setState(() => model = newModel);
+        widget.onTick?.call(newModel.time);
       },
     );
-    model = ClockModel(DateTime.now());
+    // Fire once immediately so a parent's digital time isn't blank on the first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onTick?.call(model.time);
+    });
   }
 
   @override
   void dispose() {
-    controller.dispose(); // Cancel the timer to prevent memory leaks
+    controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        CustomPaint(
-          painter: ClockPainter(model),
-          size: Size(
-            MediaQuery.sizeOf(context).width,
-            MediaQuery.sizeOf(context).width,
-          ),
-        ),
-        SizedBox(height: MediaQuery.sizeOf(context).height * 0.05),
-        Text(
-          "$timeAfterReform",
-          style: TextStyle(
-            fontFamily: 'cairo',
-            decoration: TextDecoration.none,
-            color: Color(0xffF0F8FF),
-            fontSize: MediaQuery.sizeOf(context).width * 0.12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-
-      ],
+    // Decorative — the parent's digital time text is the accessible source
+    // of truth for the current time, so this doesn't need its own label.
+    return ExcludeSemantics(
+      child: CustomPaint(
+        painter: ClockPainter(model),
+        size: Size(widget.size, widget.size),
+      ),
     );
   }
 }
@@ -80,7 +64,14 @@ class ClockPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 3.5;
+    // Radius is most of the canvas half-width, leaving just enough margin
+    // for the tick marks not to clip at the edge. Previously this divided
+    // by 3.5, a leftover from when this widget was always given the full
+    // device width as its canvas — that made the visible dial only ~57% of
+    // whatever size was passed in, so callers had to over-size the widget
+    // to compensate. Now `size` maps directly and predictably to the
+    // visible clock diameter.
+    final radius = size.width / 2.2;
 
     final paintCircle =
         Paint()
@@ -89,10 +80,11 @@ class ClockPainter extends CustomPainter {
 
     canvas.drawCircle(center, radius / 2, paintCircle);
 
-    // علامات الساعة
+    // علامات الساعة — darkened relative to the original flat #D3E0EC so they
+    // stay legible against the light card (previous contrast was ~1.25:1).
     final tickPaint =
         Paint()
-          ..color = Color(0xffD3E0EC)
+          ..color = const Color(0xFF283F54).withValues(alpha: 0.35)
           ..strokeWidth = 3.3;
 
     for (int i = 0; i < 60; i++) {

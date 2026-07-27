@@ -7,7 +7,21 @@ import 'package:myadhan/providers/prayer_times_provider.dart';
 class CountdownTimer extends ConsumerStatefulWidget {
   final VoidCallback onFinish;
 
-  const CountdownTimer({required this.onFinish, super.key});
+  /// Overrides the default 16px bold style. Falls back to the existing
+  /// style when omitted, so the PrayerTimeScreen call site is unaffected.
+  final TextStyle? style;
+
+  /// Fired whenever the next-prayer name or Adhan/Iqamah phase changes, so a
+  /// parent can display the prayer name in sync with this ticking countdown
+  /// without recomputing "which prayer is next" itself.
+  final void Function(String prayerName, bool isAdhanPhase)? onPrayerInfo;
+
+  const CountdownTimer({
+    required this.onFinish,
+    this.style,
+    this.onPrayerInfo,
+    super.key,
+  });
 
   @override
   ConsumerState<CountdownTimer> createState() => _CountdownTimerState();
@@ -20,6 +34,11 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
     fontWeight: FontWeight.bold,
     fontSize: 16,
   );
+  // The app's own directional-marker red (DESIGN_IDENTITY.md), not
+  // Material's generic _iqamaColor — this state isn't a Qibla marker, but
+  // it should still be the one red the app actually uses, not a second,
+  // slightly different one.
+  static const _iqamaColor = Color(0xFFE54D4D);
 
   Timer? _timer;
   Duration _remaining = Duration.zero;
@@ -29,6 +48,15 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
   DateTime? _targetTime;
   DateTime? _iqamaStartTime;
   String? _nextPrayerName;
+
+  TextStyle get _effectiveStyle => widget.style ?? _textStyle;
+
+  void _notifyPrayerInfo() {
+    final name = _nextPrayerName;
+    if (name != null) {
+      widget.onPrayerInfo?.call(name, _isAdhanPhase);
+    }
+  }
 
   @override
   void dispose() {
@@ -74,9 +102,13 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
     if (elapsedSincePrevious >= Duration.zero &&
         elapsedSincePrevious < delayForPrevious) {
       // WE ARE IN THE IQAMAH PHASE!
+      // Keep the name as the prayer currently in its Iqamah window (matches
+      // the live-transition path below) — not the one after it. Nothing
+      // used to read this name externally so this drift was invisible
+      // before; it isn't a deliberate "show the next one during Iqamah" rule.
       _isAdhanPhase = false;
       _lastPlayedPrayer = previous.name;
-      _nextPrayerName = prayers[(previousIndex + 1) % prayers.length].name;
+      _nextPrayerName = previous.name;
       _iqamaStartTime = previousTimeCandidate;
       _iqamaRemaining = elapsedSincePrevious;
       // Keep target time as the previous one just so _remaining isn't null,
@@ -92,6 +124,7 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
       _iqamaRemaining = Duration.zero;
     }
 
+    _notifyPrayerInfo();
     _updateRemaining();
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -131,6 +164,7 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
       _lastPlayedPrayer = _nextPrayerName;
       _iqamaStartTime = _targetTime ?? DateTime.now();
       _iqamaRemaining = Duration.zero;
+      _notifyPrayerInfo();
     } else if (!_isAdhanPhase && _iqamaStartTime != null) {
       final delay = _getIqamaDelay(_lastPlayedPrayer);
       final elapsed = DateTime.now().difference(_iqamaStartTime!);
@@ -179,12 +213,14 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
           loading:
               () => Text(
                 '00:00:00',
-                style: _textStyle.copyWith(color: const Color(0xffF0F8FF)),
+                textDirection: TextDirection.ltr,
+                style: _effectiveStyle.copyWith(color: const Color(0xffF0F8FF)),
               ),
           error:
               (_, __) => Text(
                 '--:--:--',
-                style: _textStyle.copyWith(color: Colors.red),
+                textDirection: TextDirection.ltr,
+                style: _effectiveStyle.copyWith(color: _iqamaColor),
               ),
           data: (data) {
             if (_targetTime == null) {
@@ -194,8 +230,12 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
             }
             return Text(
               _formatDuration(_isAdhanPhase ? _remaining : _iqamaRemaining),
-              style: _textStyle.copyWith(
-                color: _isAdhanPhase ? const Color(0xffF0F8FF) : Colors.red,
+              // Always render digits left-to-right, regardless of any
+              // ambient RTL Directionality a parent may set — this is
+              // plain numeric content, not Arabic text.
+              textDirection: TextDirection.ltr,
+              style: _effectiveStyle.copyWith(
+                color: _isAdhanPhase ? const Color(0xffF0F8FF) : _iqamaColor,
               ),
             );
           },
