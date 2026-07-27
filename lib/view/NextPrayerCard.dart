@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:myadhan/model/PrayerTimeModel.dart';
 import 'package:myadhan/providers/prayer_times_provider.dart';
+import 'package:myadhan/view/AccentCard.dart';
 import 'package:myadhan/view/CountDown.dart';
 
 /// The Home screen's focal point: which prayer is next, and how long until
@@ -17,19 +18,10 @@ class NextPrayerCard extends ConsumerStatefulWidget {
   ConsumerState<NextPrayerCard> createState() => _NextPrayerCardState();
 }
 
-class _NextPrayerCardState extends ConsumerState<NextPrayerCard>
-    with SingleTickerProviderStateMixin {
-  static const _cardColor = Color(0xFF283F54);
+class _NextPrayerCardState extends ConsumerState<NextPrayerCard> {
   static const _accent = Color(0xFF4DB3E5);
   static const _muted = Color(0xFFD3E0EC);
   static const _content = Color(0xFFF0F8FF);
-
-  static const _cardRadius = BorderRadius.only(
-    topLeft: Radius.circular(36),
-    topRight: Radius.circular(12),
-    bottomLeft: Radius.circular(12),
-    bottomRight: Radius.circular(36),
-  );
 
   static const _prayerTimeKeys = {
     'الفجر': 'fajer',
@@ -41,24 +33,6 @@ class _NextPrayerCardState extends ConsumerState<NextPrayerCard>
 
   String? _prayerName;
   bool _isAdhanPhase = true;
-  late final AnimationController _pulseController;
-
-  @override
-  void initState() {
-    super.initState();
-    // A slow, low-amplitude breathing pulse on the accent glow — a calm
-    // "alive" presence rather than a mechanical tick.
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
 
   void _handlePrayerInfo(String name, bool isAdhanPhase) {
     if (_prayerName == name && _isAdhanPhase == isAdhanPhase) return;
@@ -110,55 +84,22 @@ class _NextPrayerCardState extends ConsumerState<NextPrayerCard>
 
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: AnimatedBuilder(
-        animation: _pulseController,
-        builder: (context, child) {
-          final glow = 0.12 + (_pulseController.value * 0.14);
-          return Container(
-            decoration: BoxDecoration(
-              color: _cardColor,
-              borderRadius: _cardRadius,
-              boxShadow: [
-                BoxShadow(
-                  color: _accent.withValues(alpha: glow),
-                  blurRadius: 20,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-            child: child,
-          );
-        },
-        child: ClipRRect(
-          borderRadius: _cardRadius,
-          child: Stack(
-            children: [
-              // Thin accent edge on the RTL leading (right) side — a
-              // spatial "this is the active one" cue, not just text color.
-              Positioned(
-                top: 0,
-                bottom: 0,
-                right: 0,
-                child: Container(width: 4, color: _accent),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 20, 20),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  switchInCurve: Curves.easeInOut,
-                  switchOutCurve: Curves.easeInOut,
-                  child:
-                      showError
-                          ? _buildError(key: const ValueKey('error'))
-                          : showLoading
-                          ? _buildLoading(key: const ValueKey('loading'))
-                          : _buildReady(
-                            key: ValueKey('$_prayerName-$_isAdhanPhase'),
-                            timeLabel: timeLabel,
-                          ),
-                ),
-              ),
-            ],
+      child: AccentCard(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 20, 20),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            switchInCurve: Curves.easeInOut,
+            switchOutCurve: Curves.easeInOut,
+            child:
+                showError
+                    ? _buildError(key: const ValueKey('error'))
+                    : showLoading
+                    ? _buildLoading(key: const ValueKey('loading'))
+                    : _buildReady(
+                      key: ValueKey('$_prayerName-$_isAdhanPhase'),
+                      timeLabel: timeLabel,
+                    ),
           ),
         ),
       ),
