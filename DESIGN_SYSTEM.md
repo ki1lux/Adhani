@@ -58,20 +58,19 @@ Don't introduce a new radius value without checking that scale first.
 Use `DESIGN_IDENTITY.md` §1 for the palette and role meanings. Two rules on
 top of that for day-to-day component building:
 
-- **Pull the literal hex from `DESIGN_IDENTITY.md`, not a `Colors.*`
-  shortcut.** `Colors.white` / `Colors.white70` / `Colors.white60` show up
-  throughout the view layer standing in for `#F0F8FF` and its opacity tiers.
-  They render close enough to pass a glance, but they're not the documented
-  token, and they silently ignore the "derive muted/highlight states via
-  opacity on the primary content color" rule (`DESIGN_IDENTITY.md` §1). New
-  code should use `#F0F8FF` (+ the `66`/`1A` alpha tiers) directly.
-- **Dialogs/sheets use `#0E2031`.** `AlertDialog` backgrounds currently vary
-  between `#0E2031`, `#2D4356`, and `#0A2239` across `SettingsScreen.dart`
-  and `PrayerTimeScreen.dart`. `#0E2031` is both the most common of the three
-  today and it's the hex `DESIGN_IDENTITY.md` already assigns the "elevated
-  dark surface... sheets sitting on top of the base surface" role to — i.e.
-  it's the semantically-correct one. New dialogs/bottom sheets should use it;
-  existing `#2D4356`/`#0A2239` dialogs are drift to converge when touched.
+- **Use `AppColors` (`lib/theme/app_colors.dart`) — never a raw `Color(0x…)` or a `Colors.*` shortcut.** That file mirrors `DESIGN_IDENTITY.md` §1 one-for-one and is the only place a color should be defined. The previous free-for-all is exactly how `Colors.white70`, three different reds, and a stray `Colors.green` crept in.
+- **Dialogs/sheets use `AppColors.sheetBottom`, snackbars `AppColors.sheetTop`.** Both dialogs and every snackbar now share these; the old `#0E2031`/`#2D4356`/`#0A2239` spread is gone.
+- **`#5FE08E` (success/target-state) is scoped, not a general "OK" color.**
+  It exists for exactly one meaning — "the target state was reached" (today:
+  the Qibla compass alignment) — mirroring how the red (`#FF6B5E`) is scoped
+  to "directional marker + countdown/urgency," not "generic error color."
+  Resist the urge to reuse the success green for confirmation snackbars,
+  save-succeeded toasts, or checkmarks elsewhere; that's the same drift that
+  made the accent blue show up on four unrelated things in one dialog before
+  it got pulled back (see `PrayerTimeScreen_UI_AUDIT.md`'s history). If a
+  screen needs a generic "this worked" signal that isn't "you reached the
+  target," that's a new, separate question — don't borrow this token for it.
+- **`#FFC46B` (warning) pairs with `#5FE08E`.** In use for the "scheduled tomorrow" vs "scheduled today" alarm states in Settings. Same scoping discipline as the other status hues — it means "needs attention," not "generic highlight."
 
 ## 4. Typography
 
@@ -118,22 +117,24 @@ exempt — it's not a reusable interaction pattern):
 
 ## 6. Component patterns
 
-- **Buttons:** no shared button theme exists yet (`ThemeData` in `main.dart`
-  only sets `scaffoldBackgroundColor`/`canvasColor`/`pageTransitionsTheme` —
-  no `elevatedButtonTheme`). Every screen currently hand-styles
-  `ElevatedButton.styleFrom(...)` independently, and the results vary
-  (`Colors.white24`, `Colors.white.withValues(alpha: 0.05)`, `#4DB3E5`, plain
-  white). When adding a button, styleFrom with `radius: 12` (§2) and a color
-  from `DESIGN_IDENTITY.md` §1 — don't invent a new translucent white tint
-  per screen.
-- **Dialogs:** `AlertDialog` with `backgroundColor: #0E2031` (§3), radius
-  `12` or `24` depending on size (§2).
-- **List rows** (the `PrayerTimeScreen` pattern): a rounded (`12`) container,
-  background highlight for the "active/next" row using the `#4DB3E5`/opacity
-  treatment, muted (`#F0F8FF` at ~40% alpha) for "already passed" rows. This
-  is the reference pattern for any future list of similar "one of these is
-  current" items — reuse it rather than inventing a new selected-state
-  language.
+- **Screen background:** wrap the `Scaffold` body in `AppBackground`
+  (`lib/view/AppBackground.dart`). It owns the navy glow gradient and the
+  Islamic geometric pattern overlay — don't hand-roll a gradient or stack a background
+  image per screen, which is what it replaced.
+- **Buttons:** there's still no shared `elevatedButtonTheme`; screens
+  hand-style `ElevatedButton.styleFrom(...)` (Qibla) or use the bespoke
+  `_TapScale`-based helpers (Prayer Time List). Prefer the latter shape:
+  radius `12` (§2) and a color from `AppColors` — never a new translucent
+  white tint.
+- **Dialogs:** `AlertDialog` with `backgroundColor: AppColors.sheetBottom`,
+  `surfaceTintColor: Colors.transparent` (Material 3 tints dialogs by
+  default, which desynced two identical backgrounds before), and radius `24`.
+- **Cards & list rows:** `AppColors.cardFill` background +
+  `AppColors.cardBorder` border — the translucent-over-glow recipe, not an
+  opaque tone. The "active/next" row uses `AccentCard` (accent edge, breathing
+  glow, accent-colored name); "already passed" rows drop to the `label` text
+  tier. This is the reference pattern for any "one of these is current" list
+  — reuse it rather than inventing a second selected-state language.
 - **Bottom navigation:** the 4-tab bar in `main.dart` (`_buildBottomNav`) is
   the one and only navigation chrome — see §8. Don't add a second nav
   paradigm (e.g. a drawer, a top tab bar) without a strong reason.
@@ -238,8 +239,21 @@ only one place when it could serve more:
 ## Known drift to reconcile (not additional canon)
 
 Called out throughout this document, collected here for visibility:
-spacing values outside the §1 scale; `AlertDialog` backgrounds other than
-`#0E2031`; ad hoc button colors instead of a shared style; `'Cairo'`
-(capitalized) instead of `'cairo'`; per-widget `textDirection` overrides.
+
+- Spacing values outside the §1 scale.
+- Ad hoc button styling instead of one shared theme — `QiblaScreen` still
+  uses raw `ElevatedButton`s while the Prayer Time List uses the bespoke
+  `_TapScale` helpers.
+- `'Cairo'` (capitalized) instead of `'cairo'` — still present in
+  `QiblaScreen`.
+- Per-widget `textDirection`/`Directionality` overrides standing in for
+  real app-wide RTL configuration.
+- `_TapScale`, `_noInk`, and the dialog-action helpers are private to
+  `PrayerTimeScreen.dart`; if a third screen needs them they should be
+  extracted to shared widgets rather than copied.
+
 None of these are "the way we do it" — they're the gap between current code
 and this document, to close opportunistically as each area is touched.
+
+**Resolved this pass:** the color free-for-all (every color now comes from
+`AppColors`) and per-screen background stacking (now `AppBackground`).

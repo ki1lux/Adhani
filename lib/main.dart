@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:myadhan/model/PrayerTimeModel.dart';
 import 'package:myadhan/prayer_alarm_scheduler.dart';
 import 'package:myadhan/providers/prayer_times_provider.dart';
+import 'package:myadhan/theme/app_colors.dart';
 import 'package:myadhan/view/QiblaScreen.dart';
 import 'package:myadhan/view/PrayerTimeScreen.dart';
 import 'dart:ui';
@@ -166,8 +167,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         fontFamily: 'cairo',
-        scaffoldBackgroundColor: const Color(0xff0A2239),
-        canvasColor: const Color(0xff0A2239),
+        scaffoldBackgroundColor: AppColors.surface,
+        canvasColor: AppColors.surface,
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: <TargetPlatform, PageTransitionsBuilder>{
             TargetPlatform.android: FadeTransitionBuilder(),
@@ -217,8 +218,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           child: Container(
             height: 58,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: AppColors.barFill,
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.cardBorder),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -245,32 +247,41 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             setState(() => _selectedIndex = index);
           }
         },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          height: double.infinity,
-          padding: const EdgeInsets.all(18),
-          child: AnimatedScale(
-            scale: isSelected ? 1.15 : 1.0,
-            duration: const Duration(milliseconds: 200),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow:
-                    isSelected
-                        ? [
-                          BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.25),
-                            blurRadius: 16,
-                            spreadRadius: 2,
-                          ),
-                        ]
-                        : null,
-              ),
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient:
+                  isSelected
+                      ? const LinearGradient(
+                        colors: [AppColors.accent, AppColors.accentDeep],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      )
+                      : null,
+              boxShadow:
+                  isSelected
+                      ? const [
+                        BoxShadow(
+                          color: AppColors.accentBorder,
+                          blurRadius: 18,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                      : null,
+            ),
+            child: Center(
               child: SvgPicture.asset(
                 asset,
+                width: 22,
+                height: 22,
                 colorFilter: ColorFilter.mode(
-                  isSelected ? Colors.white : Colors.white60,
+                  isSelected ? AppColors.surface : AppColors.faint,
                   BlendMode.srcIn,
                 ),
               ),

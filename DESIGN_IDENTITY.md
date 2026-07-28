@@ -1,4 +1,4 @@
-# Design Identity — Adhani
+| `#5FE08E` | 🔒 | **Success / target-state reached.** Refines `#4DE599` (same role: "you got it"). Still not a general confirmation/success color for arbitrary snackbars or checkmarks — that discipline hasn't changed, only the hex. | `QiblaScreen.dart` (aligned with Qibla), `SettingsScreen.dart` (alarm scheduled/working) || `#FFC46B` | 🔒 | **Warning.** A fourth semantic hue. Now in use for the "scheduled for tomorrow" alarm state in Settings, paired against `#5FE08E` for "scheduled today / alarm working" — which is exactly the pairing this token was reserved for. | `SettingsScreen.dart` alarm-status list || `AccentCard`'s border, nav-bar selected glow || Nav bar selected pill, next-prayer row/card, active switches and radios || Dialog barriers || Dialogs (`AlertDialog` backgrounds use `sheetBottom`; `sheetTop` also carries snackbars) |# Design Identity — Adhani
 
 This document is the brand contract for any UI redesign. It captures what makes
 the app recognizably *this* app. Layouts, spacing, component structure, and
@@ -23,35 +23,108 @@ mistaken for intentional identity.
 - 🔁 **Open for replacement** — the *role* must survive, the hex does not.
   Currently only the blue accent.
 
-| Hex | Status | Role / meaning | Where it's used |
+**Rollout status:** ✅ **fully applied.** Every screen now reads its colors
+from `lib/theme/app_colors.dart`, which mirrors this section one-for-one.
+There are no remaining raw `Color(0x…)` literals or `Colors.white*` /
+`Colors.red` / `Colors.green` shortcuts in `lib/` outside that token file
+(plus one deliberate `Colors.white.withValues(alpha: .035)` for the pattern
+overlay, and the splash screen's own glow/shadow alphas).
+
+**Add or change a color in `app_colors.dart`, never inline in a widget** —
+that file existing is what keeps this section honest.
+
+### 1a. Backgrounds — navy family
+
+The base surface is now a subtle vertical/radial glow rather than one flat
+tone — a lighter navy easing into a darker one — instead of a single flat
+`Container` color everywhere.
+
+| Hex | Status | Role | Where |
 |---|---|---|---|
-| `#0A2239` | 🔒 | **Base surface.** The app's canvas — scaffold background, canvas color, app bar. This is the "night sky navy" the whole app sits on. | `main.dart` theme, `PrayerTimeScreen`, native widget background |
-| `#0E2031` | 🔒 | **Elevated dark surface.** A touch darker than base, for bars/buttons/sheets sitting on top of the base surface. | `PrayerTimeScreen` app bars, elevated button backgrounds |
-| `#1A3A5C` / `#1E2A3A` / `#0B1220` | 🔒 | Secondary dark surfaces (snackbars, one-off containers) — same family as the two above, do not introduce unrelated dark hues. | `PrayerTimeScreen` snackbar, misc containers |
-| `#283F54` / `#2D4356` | 🔒 | **Card / mid-surface tone.** Sits between base and elevated — used for cards and secondary panels. | Various screens |
-| `#F0F8FF` | 🔒 | **Primary content color.** Near-white ("Alice Blue") text/icon color on dark surfaces. This is *also* the app icon's tile background — see §2. | Prayer names/times, headers, icons; widget "current" text |
-| `#D3E0EC` | 🔒 | Secondary/muted content on dark surfaces (lower emphasis than `#F0F8FF`, higher than the opacity tiers below). | Secondary labels |
-| `#4DB3E5` / `#0768C5` | 🔁 **open** | **Accent — "active / next / on".** Reserved for the thing that's currently selected or upcoming: the next-prayer highlight, active toggle/switch thumb, the widget's next-prayer text. The *role* (a single, distinct hue meaning "this one is active/next") is locked; the specific blue is not — swap it for a better-performing hue (e.g. better contrast on `#0A2239`/`#0E2031`, better distinction from the base-surface blues) as long as it still reads clearly as "the active one" and doesn't collide with the red directional accent below. | Next-prayer highlight (in-app and in the home screen widget), active switches |
-| `#E54D4D` | 🔒 | **Accent — directional marker only.** Reserved specifically for the Qibla/compass direction indicators (arrow tip, compass tick). It is deliberately the only warm color in an otherwise cool (navy/blue) palette — that contrast *is* the point: red = "this way." Never use it as a generic error/danger color or a general accent. | `arrow.svg`, `ka3baInCompass.svg` |
+| `#0A2740` | 🔒 | **Base surface.** The mid-navy the app sits on (refines the previous `#0A2239` — same hue, barely different value). | Scaffold background |
+| `#12405C` / `#154762` | 🔒 | **Top of the background glow.** The lighter navy the base-surface gradient eases *from*, near the top of the screen. | New background-gradient recipe |
+| `#05131F` / `#061726` | 🔒 | **Bottom of the background glow.** The darker navy the same gradient eases *into*, toward the bottom. | New background-gradient recipe |
+| `#123A55` → `#0B2740` | 🔒 | **Bottom-sheet / dialog pair.** Replaces the old flat `#0E2031`. `sheetBottom` is the dialog background; `sheetTop` carries snackbars and the lighter end of any sheet gradient. | Both dialogs, all snackbars |
+| `rgba(3,10,17,.62)` | 🔒 | **Dialog scrim.** Replaced `Colors.black54` as the barrier behind a dialog. | Dialog barriers |
 
-Overall, the navy-surface + near-white-content + red-directional-marker
-palette is locked as a *system* — refine shades within it freely, but don't
-add unrelated hue families or remove any of these roles. The accent blue is
-the one deliberate exception: it's a placeholder for "whatever hue best says
-active/next" and is fair game if you find something better.
+**Translucent surfaces** (§ "Surfaces" in the brief) sit *on top of* the
+background rather than replacing it — the old opaque `#283F54`/`#2D4356`
+card tones are gone in favor of these:
 
-**Opacity tiers on the primary content color** (used instead of separate gray hexes):
-- `#F0F8FF` at ~40% alpha (`#66F0F8FF`) → "passed" state (a prayer that already happened today).
-- `#F0F8FF` at ~10% alpha (`#1AF0F8FF`) → subtle row/surface highlight background.
+| Value | Role | Where |
+|---|---|---|
+| `rgba(255,255,255,.045)` fill + `rgba(255,255,255,.06)` border | Cards & rows | Prayer rows, `AccentCard` |
+| `rgba(255,255,255,.07)` | Tab bar, icon buttons | Bottom nav |
+| White at ~5%, Islamic geometric tiling (`assets/Vector.svg`) | Pattern overlay | `AppBackground` |
 
-Keep this pattern — muted and highlighted states are derived from the primary
-content color via opacity, not from separate gray/tint hexes.
+**Applied:** every screen renders through the shared `AppBackground` widget
+(`lib/view/AppBackground.dart`), which owns the linear fade, the radial
+hotspot, and the pattern overlay. It consolidates the "flat `Container` +
+full-bleed `Vector.svg`" pair each screen used to stack itself — `Vector.svg`
+is still the decoration, just declared in one place now instead of three.
 
-**Known inconsistency, not to be codified:** many screens use `Colors.white` /
-`Colors.white70` directly instead of `#F0F8FF` / the opacity tiers for the same
-"primary content on dark" role. The *intent* (near-white content on navy) is
-canon; the raw `Colors.white` literal is not — a redesign should converge these
-onto the documented hex, not preserve the inconsistency.
+**The pattern is the identity's Islamic geometry, not a generic texture.**
+`assets/Vector.svg` is a girih-style tiling (~3,000 paths, one fill). It's
+tinted white at low opacity in `AppBackground` rather than using its own
+baked-in `#071C30`, so it reads evenly over the whole gradient instead of
+vanishing into the dark bottom. Swap the asset or the tint there and every
+screen follows; don't add a second background decoration per screen.
+
+### 1b. Light surfaces (cards, compass dial)
+
+| Hex | Status | Role | Where |
+|---|---|---|---|
+| `#F5F9FC` → `#E2ECF3` → `#CFDEE9` | 🔒 | **"Arch" gradient** — the light card/panel shape (e.g. Home's clock card), now a three-stop gradient instead of a flat `#F0F8FF`. | Light card surfaces |
+| `#F1F7FB` | 🔒 | **Compass dial background** ("white compass"). Near-identical to the arch tones but its own token since the dial is its own element. | `QiblaScreen` dial |
+| `#0E2F47` / `#12354F` | 🔒 | **Clock hands, dial numerals.** Refines the previous `#283F54`. | `AnalogClockView`, compass dial |
+| `#5B7E97` | 🔒 | **Secondary text on light surfaces.** A distinct token from `#D3E0EC` (§1d) — that one is for dark surfaces, this is specifically for text sitting on the light card/dial. | Text on light cards |
+
+### 1c. Accent — cyan
+
+| Hex | Status | Role | Where |
+|---|---|---|---|
+| `#7AD2F7` primary / `#3FA3D8` deep | 🔁 **open** | **Accent — "active / next / on."** Same role as before (§ intro), refreshed from `#4DB3E5`/`#0768C5` to this cyan gradient pair. Still the one deliberately swappable hue in the palette. | Nav bar selected pill, next-prayer name/card, active switches and radios |
+| `rgba(122,210,247,.12–.22)` fills / `.28–.45` borders | 🔁 **open** | Opacity tiers *of the accent* for tinted fills/borders — "related to the active item" without full accent-color text. | `AccentCard`'s border, nav-bar selected glow |
+
+### 1d. Text (on dark surfaces)
+
+Replaces the old two-tier `#F0F8FF` (primary) / `#D3E0EC` (secondary) system
+with a six-tier scale — same *intent* (near-white primary content, graduated
+muting for lower emphasis), more graduation between them.
+
+| Hex | Status | Role |
+|---|---|---|
+| `#FFFFFF` | 🔒 | Headings |
+| `#DCEAF5` / `#E6F1F9` | 🔒 | Body text |
+| `#C6DBEA` | 🔒 | Secondary text |
+| `#A9C3D6` | 🔒 | Muted text |
+| `#8BA7BD` | 🔒 | Labels/captions |
+| `#7D97AD` / `#6B869C` | 🔒 | Faint text, inactive icons (nav bar unselected icons — migrated) |
+
+**Applied:** all screens now use this scale via `AppColors`. The old `#F0F8FF`/`#D3E0EC` pair was mapped by context — headings to `heading`, most content to `body`, secondary labels to `secondary`, and de-emphasized/passed states to `label`.
+
+**Opacity tiers on the primary content color** (still valid, now read against
+whichever text tier above is in play): `~40%` alpha → "passed" state (a
+prayer that already happened today); `~10%` alpha → subtle row/surface
+highlight background. Muted/highlighted states are derived via opacity, not
+separate gray hexes.
+
+### 1e. Status colors
+
+| Hex | Status | Role | Where |
+|---|---|---|---|
+| `#FF6B5E` / `#FF5D52` | 🔒 | **Directional marker + countdown/urgency.** Refines `#E54D4D`, and its role is deliberately widened from "Qibla marker only" to also cover countdown/urgency displays (e.g. an Iqama countdown) — a considered exception to how tightly this hue used to be scoped, not scope creep. Still never a generic error/danger color for arbitrary UI. | `arrow.svg`, `ka3baInCompass.svg`, `CountDown.dart`'s Iqama color |
+| `#5FE08E` | 🔒 | **Success / target-state reached.** Refines `#4DE599` (same role: "you got it"). Still not a general confirmation color for arbitrary snackbars or checkmarks — that discipline hasn't changed, only the hex. | `QiblaScreen` (aligned with Qibla), `SettingsScreen` (alarm scheduled today / working) |
+| `#FFC46B` | 🔒 | **Warning.** The fourth semantic hue. Now in use for the "scheduled for tomorrow" alarm state, paired against `#5FE08E` for "scheduled today" — which is precisely the pairing it was reserved for, so it went in as soon as that pairing surfaced. | `SettingsScreen` alarm-status list |
+
+Note this means the palette now deliberately holds **two** warm hues (red +
+amber) alongside the cool navy/cyan/green — each still scoped to exactly one
+meaning, which is the discipline that matters, not "stay monochrome."
+
+**Previously a known inconsistency, now resolved:** screens used to reach for
+`Colors.white`/`Colors.white70`/`Colors.red`/`Colors.green` instead of a
+documented tier. Those are gone — `lib/theme/app_colors.dart` is the only
+place a color is defined. Keep it that way.
 
 ## 2. Logo & icon style
 
@@ -71,8 +144,11 @@ The app icon (`assets/mainIcon.png`) defines the icon language:
   the same flat/no-stroke/no-gradient rule, just inverted to white-on-navy to
   match the base surface. New icons should match this: solid geometric
   silhouettes, one fill color, no outline style, no skeuomorphism.
-- The red accent (`#E54D4D`) appears *only* in compass/direction graphics
-  (`arrow.svg`, `ka3baInCompass.svg`) — never in the general icon set.
+- The red accent appears *only* in compass/direction graphics (`arrow.svg`,
+  `ka3baInCompass.svg`) — never in the general icon set. Both SVGs' `fill`
+  attributes and the Dart-level `Color(...)` usages in `QiblaScreen.dart`
+  were all refreshed together to `#FF6B5E`, so the icon and the code stay
+  the same token.
 
 ## 3. Typography — Arabic + Latin pairing
 

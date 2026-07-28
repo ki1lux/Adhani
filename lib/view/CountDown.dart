@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:myadhan/model/PrayerTimeModel.dart';
 import 'package:myadhan/providers/prayer_times_provider.dart';
+import 'package:myadhan/theme/app_colors.dart';
 
 class CountdownTimer extends ConsumerStatefulWidget {
   final VoidCallback onFinish;
@@ -34,11 +35,11 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
     fontWeight: FontWeight.bold,
     fontSize: 16,
   );
-  // The app's own directional-marker red (DESIGN_IDENTITY.md), not
-  // Material's generic _iqamaColor — this state isn't a Qibla marker, but
-  // it should still be the one red the app actually uses, not a second,
-  // slightly different one.
-  static const _iqamaColor = Color(0xFFE54D4D);
+  // The app's own red (DESIGN_IDENTITY.md §1e) — its role was deliberately
+  // widened to cover countdown/urgency displays like this one, alongside
+  // the Qibla direction marker, rather than reaching for Material's
+  // generic Colors.red.
+  static const _iqamaColor = AppColors.danger;
 
   Timer? _timer;
   Duration _remaining = Duration.zero;
@@ -214,7 +215,7 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
               () => Text(
                 '00:00:00',
                 textDirection: TextDirection.ltr,
-                style: _effectiveStyle.copyWith(color: const Color(0xffF0F8FF)),
+                style: _effectiveStyle.copyWith(color: AppColors.body),
               ),
           error:
               (_, __) => Text(
@@ -235,7 +236,7 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
               // plain numeric content, not Arabic text.
               textDirection: TextDirection.ltr,
               style: _effectiveStyle.copyWith(
-                color: _isAdhanPhase ? const Color(0xffF0F8FF) : _iqamaColor,
+                color: _isAdhanPhase ? AppColors.body : _iqamaColor,
               ),
             );
           },

@@ -5,13 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:myadhan/model/PrayerTimeModel.dart';
 import 'package:myadhan/prayer_alarm_scheduler.dart';
 import 'package:myadhan/providers/prayer_times_provider.dart';
+import 'package:myadhan/theme/app_colors.dart';
+import 'package:myadhan/view/AppBackground.dart';
 import 'package:myadhan/view/AccentCard.dart';
 import 'package:myadhan/view/CountDown.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -59,15 +60,9 @@ class _TapScaleState extends State<_TapScale> {
       onTapUp:
           widget.onTap == null
               ? null
-              : (_) async {
+              : (_) {
                 setState(() => _pressed = false);
-                // Let the release animation actually be seen before firing
-                // the action — many of these close a dialog or navigate
-                // away, and doing that in the same frame as "un-pressing"
-                // cut the animation off mid-motion, which read as a harsh
-                // flash-cut rather than a smooth press.
-                await Future.delayed(const Duration(milliseconds: 90));
-                if (mounted) widget.onTap!();
+                widget.onTap!();
               },
       onTapCancel:
           widget.onTap == null ? null : () => setState(() => _pressed = false),
@@ -85,6 +80,27 @@ class _TapScaleState extends State<_TapScale> {
   }
 }
 
+/// Disables Material's ink/splash system for everything inside.
+///
+/// The stock ripple is a pale overlay designed for light Material surfaces;
+/// on this app's dark navy it reads as a harsh white flash. Killing it at
+/// the theme level (rather than per-widget) also covers the splashes baked
+/// into stock widgets we don't build ourselves — the `TextField`, the
+/// `Switch`, and `AlertDialog`'s own internals — which is why setting
+/// `splashColor: transparent` on individual widgets wasn't enough.
+Widget _noInk(BuildContext context, Widget child) {
+  return Theme(
+    data: Theme.of(context).copyWith(
+      splashFactory: NoSplash.splashFactory,
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
+      focusColor: Colors.transparent,
+    ),
+    child: child,
+  );
+}
+
 /// Dialog shape/background shared by both dialogs on this screen — was
 /// previously only the background color; different primary-action styling
 /// (a bright white pill on one, plain text on the other) made the two
@@ -97,7 +113,7 @@ const _dialogShape = RoundedRectangleBorder(
 Widget _dialogTextAction({
   required String label,
   required VoidCallback onTap,
-  Color color = const Color(0xFFD3E0EC),
+  Color color = AppColors.secondary,
   FontWeight weight = FontWeight.w500,
 }) {
   return _TapScale(
@@ -134,21 +150,21 @@ Widget _dialogPrimaryButton({
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F8FF),
+        color: AppColors.body,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, color: const Color(0xFF0A2239), size: 16),
+            Icon(icon, color: AppColors.surface, size: 16),
             const SizedBox(width: 6),
           ],
           Text(
             label,
             style: const TextStyle(
               fontFamily: 'cairo',
-              color: Color(0xFF0A2239),
+              color: AppColors.surface,
               fontWeight: FontWeight.w700,
               fontSize: 14,
             ),
@@ -302,17 +318,17 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
 
   Widget _buildLoadingState() {
     return Container(
-      color: const Color(0xff0A2239),
+      color: AppColors.surface,
       child: const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Color(0xFFF0F8FF)),
+            CircularProgressIndicator(color: AppColors.body),
             SizedBox(height: 24),
             Text(
               'جاري التحميل...',
               style: TextStyle(
-                color: Color(0xFFF0F8FF),
+                color: AppColors.body,
                 fontFamily: 'cairo',
                 fontSize: 16,
               ),
@@ -328,7 +344,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
     // in the accompanying explanation for whether an error state should use
     // red at all, given DESIGN_IDENTITY.md reserves it for the Qibla marker.
     return Container(
-      color: const Color(0xff0A2239),
+      color: AppColors.surface,
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -336,7 +352,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
             const Text(
               'حدث خطأ',
               style: TextStyle(
-                color: Colors.red,
+                color: AppColors.danger,
                 fontFamily: 'cairo',
                 fontSize: 18,
               ),
@@ -345,7 +361,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
             Text(
               '$error',
               style: const TextStyle(
-                color: Colors.red,
+                color: AppColors.danger,
                 fontFamily: 'cairo',
                 fontSize: 14,
               ),
@@ -373,16 +389,11 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
         statusBarBrightness: Brightness.dark, // White icons on iOS
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xff0A2239),
-        body: Stack(
-          children: [
-            SvgPicture.asset(
-              'assets/Vector.svg',
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-            ),
-            SafeArea(
+        backgroundColor: AppColors.surface,
+        // AppBackground replaces the old flat-color + Vector.svg pair with
+        // the shared navy glow gradient and diagonal pattern overlay.
+        body: AppBackground(
+          child: SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   // Same reasoning as the Home screen: give some of the
@@ -416,10 +427,9 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                 },
               ),
             ),
-          ],
+          ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildLocationHeader() {
@@ -427,11 +437,11 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Directionality(
         textDirection: TextDirection.rtl,
-        child: InkWell(
+        // _TapScale rather than InkWell — the last stock Material tap
+        // surface on this screen; now the header presses with the same
+        // scale/fade language as every row and dialog control.
+        child: _TapScale(
           onTap: _showLocationDialog,
-          borderRadius: BorderRadius.circular(12),
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
           child: Semantics(
             button: true,
             label: 'تغيير الموقع، $_cityText، $_countryText',
@@ -446,7 +456,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                   children: [
                     const Icon(
                       Icons.location_on,
-                      color: Color(0xFFF0F8FF),
+                      color: AppColors.body,
                       size: 32,
                     ),
                     const SizedBox(width: 10),
@@ -464,7 +474,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                       ? _cityText
                                       : _countryText,
                                   style: const TextStyle(
-                                    color: Color(0xFFF0F8FF),
+                                    color: AppColors.body,
                                     fontFamily: 'cairo',
                                     fontSize: 28,
                                     fontWeight: FontWeight.bold,
@@ -476,7 +486,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                               const SizedBox(width: 8),
                               const Icon(
                                 Icons.edit,
-                                color: Color(0x66F0F8FF),
+                                color: AppColors.label,
                                 size: 17,
                               ),
                             ],
@@ -485,7 +495,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                             Text(
                               _countryText,
                               style: const TextStyle(
-                                color: Color(0xFFD3E0EC),
+                                color: AppColors.secondary,
                                 fontFamily: 'cairo',
                                 fontSize: 16,
                               ),
@@ -515,7 +525,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
         gradient: LinearGradient(
           colors: [
             Colors.transparent,
-            Color(0x33F0F8FF),
+            AppColors.cardBorder,
             Colors.transparent,
           ],
         ),
@@ -536,14 +546,16 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
       context: context,
       barrierDismissible: true,
       barrierLabel: '',
-      barrierColor: Colors.black54,
+      barrierColor: AppColors.scrim,
       transitionDuration: const Duration(milliseconds: 300),
       transitionBuilder: _dialogTransitionBuilder,
       pageBuilder:
-          (context, animation, secondaryAnimation) => StatefulBuilder(
+          (context, animation, secondaryAnimation) => _noInk(
+            context,
+            StatefulBuilder(
             builder:
                 (context, setDialogState) => AlertDialog(
-                  backgroundColor: const Color(0xFF0E2031),
+                  backgroundColor: AppColors.sheetBottom,
                   // Material 3 applies a default tinted overlay on dialogs
                   // unless explicitly disabled — without this, the same
                   // background color can render slightly differently
@@ -554,7 +566,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                   title: const Text(
                     'تغيير الموقع',
                     style: TextStyle(
-                      color: Color(0xFFF0F8FF),
+                      color: AppColors.body,
                       fontFamily: 'cairo',
                       fontWeight: FontWeight.w700,
                       fontSize: 20,
@@ -577,11 +589,11 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                             TextField(
                               controller: cityController,
                               textAlign: TextAlign.right,
-                              style: const TextStyle(color: Color(0xFFF0F8FF)),
+                              style: const TextStyle(color: AppColors.body),
                               decoration: InputDecoration(
                                 hintText: 'أدخل اسم المدينة (بالإنجليزية)',
                                 hintStyle: const TextStyle(
-                                  color: Color(0xFFD3E0EC),
+                                  color: AppColors.secondary,
                                   fontFamily: 'cairo',
                                   fontSize: 16,
                                 ),
@@ -594,19 +606,19 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                             padding: EdgeInsets.all(12),
                                             child: CircularProgressIndicator(
                                               strokeWidth: 1,
-                                              color: Color(0xFFD3E0EC),
+                                              color: AppColors.secondary,
                                             ),
                                           ),
                                         )
                                         : null,
                                 enabledBorder: const UnderlineInputBorder(
                                   borderSide: BorderSide(
-                                    color: Color(0x66F0F8FF),
+                                    color: AppColors.label,
                                   ),
                                 ),
                                 focusedBorder: const UnderlineInputBorder(
                                   borderSide: BorderSide(
-                                    color: Color(0xFFF0F8FF),
+                                    color: AppColors.body,
                                   ),
                                 ),
                               ),
@@ -747,7 +759,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                           children: [
                                             const Icon(
                                               Icons.location_on,
-                                              color: Color(0xFFD3E0EC),
+                                              color: AppColors.secondary,
                                               size: 20,
                                             ),
                                             const SizedBox(width: 10),
@@ -755,7 +767,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                               child: Text(
                                                 '$cityName، $countryName',
                                                 style: const TextStyle(
-                                                  color: Color(0xFFF0F8FF),
+                                                  color: AppColors.body,
                                                   fontFamily: 'cairo',
                                                   fontSize: 14,
                                                 ),
@@ -794,7 +806,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                     ),
                     _dialogTextAction(
                       label: 'بحث',
-                      color: const Color(0xFFF0F8FF),
+                      color: AppColors.body,
                       weight: FontWeight.w600,
                       onTap: () async {
                         final city = cityController.text.trim();
@@ -806,6 +818,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                     ),
                   ],
                 ),
+            ),
           ),
     ).then((_) {
       debounceTimer?.cancel();
@@ -912,14 +925,16 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
       context: context,
       barrierDismissible: true,
       barrierLabel: '',
-      barrierColor: Colors.black54,
+      barrierColor: AppColors.scrim,
       transitionDuration: const Duration(milliseconds: 300),
       transitionBuilder: _dialogTransitionBuilder,
       pageBuilder:
-          (context, animation, secondaryAnimation) => StatefulBuilder(
+          (context, animation, secondaryAnimation) => _noInk(
+            context,
+            StatefulBuilder(
             builder:
                 (context, setDialogState) => AlertDialog(
-                  backgroundColor: const Color(0xFF0E2031),
+                  backgroundColor: AppColors.sheetBottom,
                   // Material 3 applies a default tinted overlay on dialogs
                   // unless explicitly disabled — without this, the same
                   // background color can render slightly differently
@@ -930,7 +945,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                   title: Text(
                     'اشعار $prayerName',
                     style: const TextStyle(
-                      color: Color(0xFFF0F8FF),
+                      color: AppColors.body,
                       fontFamily: 'cairo',
                       fontWeight: FontWeight.w700,
                       fontSize: 20,
@@ -962,7 +977,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                     child: Text(
                                       'تفعيل الأذان',
                                       style: TextStyle(
-                                        color: Color(0xFFF0F8FF),
+                                        color: AppColors.body,
                                         fontFamily: 'cairo',
                                         fontSize: 16,
                                       ),
@@ -972,20 +987,27 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                               ),
                               Switch(
                                 value: isEnabled,
-                                activeThumbColor: const Color(0xFF4DB3E5),
+                                activeThumbColor: AppColors.accent,
+                                // Switch draws its press/hover state from
+                                // overlayColor, which the theme-level splash
+                                // override doesn't reach — this is the large
+                                // pale halo that appears around the thumb.
+                                overlayColor: const WidgetStatePropertyAll(
+                                  Colors.transparent,
+                                ),
                                 onChanged: (value) {
                                   setDialogState(() => isEnabled = value);
                                 },
                               ),
                             ],
                           ),
-                          const Divider(color: Color(0x1AF0F8FF)),
+                          const Divider(color: AppColors.cardBorder),
                           const SizedBox(height: 4),
                           // Sound selection
                           const Text(
                             'اختر نغمة الأذان',
                             style: TextStyle(
-                              color: Color(0xFFD3E0EC),
+                              color: AppColors.secondary,
                               fontFamily: 'cairo',
                               fontSize: 14,
                             ),
@@ -1014,13 +1036,13 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                         shape: BoxShape.circle,
                                         color:
                                             isSelected
-                                                ? const Color(0xFF4DB3E5)
+                                                ? AppColors.accent
                                                 : Colors.transparent,
                                         border: Border.all(
                                           color:
                                               isSelected
-                                                  ? const Color(0xFF4DB3E5)
-                                                  : const Color(0x66F0F8FF),
+                                                  ? AppColors.accent
+                                                  : AppColors.label,
                                           width: 2,
                                         ),
                                       ),
@@ -1029,7 +1051,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                               ? const Icon(
                                                 Icons.check,
                                                 size: 14,
-                                                color: Color(0xFF0A2239),
+                                                color: AppColors.surface,
                                               )
                                               : null,
                                     ),
@@ -1040,8 +1062,8 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                         style: TextStyle(
                                           color:
                                               isEnabled
-                                                  ? const Color(0xFFF0F8FF)
-                                                  : const Color(0x66F0F8FF),
+                                                  ? AppColors.body
+                                                  : AppColors.label,
                                           fontFamily: 'cairo',
                                           fontSize: 16,
                                         ),
@@ -1086,7 +1108,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                           isPlaying
                                               ? Icons.stop_circle_outlined
                                               : Icons.play_circle_outline,
-                                          color: const Color(0xFFF0F8FF),
+                                          color: AppColors.body,
                                           size: 22,
                                         ),
                                       ),
@@ -1107,7 +1129,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                     ),
                     _dialogTextAction(
                       label: 'تطبيق للكل',
-                      color: const Color(0xFFF0F8FF),
+                      color: AppColors.body,
                       weight: FontWeight.w600,
                       onTap: () async {
                         final allPrayers = [
@@ -1140,11 +1162,11 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                 'تم تطبيق الإعدادات على جميع الصلوات',
                                 style: TextStyle(
                                   fontFamily: 'cairo',
-                                  color: Color(0xFFF0F8FF),
+                                  color: AppColors.body,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
-                              backgroundColor: const Color(0xFF1A3A5C),
+                              backgroundColor: AppColors.sheetTop,
                               behavior: SnackBarBehavior.floating,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -1182,6 +1204,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                     ),
                   ],
                 ),
+            ),
           ),
     ).then((_) {
       // Clean up the player when dialog is closed/dismissed
@@ -1233,13 +1256,14 @@ class _AnimatedPrayerCardState extends State<_AnimatedPrayerCard> {
 
   @override
   Widget build(BuildContext context) {
-    // Passed-row fade: 45% — visible/legible at a glance while still
-    // reading as clearly de-emphasized next to upcoming/next rows.
-    final contentColor =
-        widget.isPassed ? const Color(0x73F0F8FF) : const Color(0xFFF0F8FF);
-    final timeColor =
-        widget.isPassed ? const Color(0x73F0F8FF) : const Color(0xFFD3E0EC);
-    final nameColor = widget.isNext ? const Color(0xFF4DB3E5) : contentColor;
+    // Passed rows drop to the `label` tier — visibly de-emphasized next to
+    // upcoming/next rows without becoming unreadable.
+    final contentColor = widget.isPassed ? AppColors.label : AppColors.body;
+    final timeColor = widget.isPassed ? AppColors.label : AppColors.body;
+    final nameColor =
+        widget.isNext
+            ? AppColors.accent
+            : (widget.isPassed ? AppColors.label : AppColors.heading);
 
     // Children ordered so that, under the RTL Directionality below, the
     // name/time sits at the reading-start (visual right) and the mute
@@ -1315,7 +1339,7 @@ class _AnimatedPrayerCardState extends State<_AnimatedPrayerCard> {
                     padding: const EdgeInsets.all(12),
                     child: Icon(
                       enabled ? Icons.volume_up : Icons.volume_off,
-                      color: enabled ? contentColor : const Color(0x66F0F8FF),
+                      color: enabled ? contentColor : AppColors.label,
                     ),
                   ),
                 ),
@@ -1334,15 +1358,13 @@ class _AnimatedPrayerCardState extends State<_AnimatedPrayerCard> {
     final decoratedRow =
         widget.isNext
             ? AccentCard(borderRadius: _rowRadius, child: row)
-            : ClipRRect(
-              borderRadius: _rowRadius,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0x0DF0F8FF),
-                  borderRadius: _rowRadius,
-                ),
-                child: row,
+            : Container(
+              decoration: BoxDecoration(
+                color: AppColors.cardFill,
+                borderRadius: _rowRadius,
+                border: Border.all(color: AppColors.cardBorder),
               ),
+              child: row,
             );
 
     return Padding(

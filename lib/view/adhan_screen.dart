@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:myadhan/providers/prayer_times_provider.dart';
+import 'package:myadhan/theme/app_colors.dart';
+import 'package:myadhan/view/AppBackground.dart';
 import 'package:myadhan/view/AnalogClockView.dart';
 import 'package:myadhan/view/NextPrayerCard.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,8 +17,8 @@ class AdhanScreen extends ConsumerStatefulWidget {
 }
 
 class _adhanScreen extends ConsumerState<AdhanScreen> {
-  static const _contentColor = Color(0xFFF0F8FF);
-  static const _mutedColor = Color(0xFFD3E0EC);
+  static const _contentColor = AppColors.heading;
+  static const _mutedColor = AppColors.secondary;
 
   String _cachedHijri = '';
   String _city = '';
@@ -68,16 +69,10 @@ class _adhanScreen extends ConsumerState<AdhanScreen> {
         statusBarBrightness: Brightness.light, // Black icons on iOS
       ),
       child: Scaffold(
-        body: Stack(
-          children: [
-            Container(color: const Color(0xff0A2239)),
-            SvgPicture.asset(
-              'assets/Vector.svg',
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-            ),
-            Column(
+        // Shared navy glow + pattern, replacing the old flat fill and the
+        // full-bleed Vector.svg this screen used to stack itself.
+        body: AppBackground(
+          child: Column(
               children: [
                 // The card sizes itself to its own content (status-bar
                 // clearance + clock + a little breathing room) instead of a
@@ -86,7 +81,17 @@ class _adhanScreen extends ConsumerState<AdhanScreen> {
                 Container(
                   width: double.infinity,
                   decoration: const BoxDecoration(
-                    color: Color(0xFFF0F8FF),
+                    // The "arch" gradient — light at the top easing down,
+                    // instead of one flat near-white fill.
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        AppColors.archTop,
+                        AppColors.archMid,
+                        AppColors.archBottom,
+                      ],
+                    ),
                     shape: BoxShape.rectangle,
                     borderRadius: BorderRadius.only(
                       bottomRight: Radius.circular(70),
@@ -143,8 +148,7 @@ class _adhanScreen extends ConsumerState<AdhanScreen> {
                   ),
                 ),
               ],
-            ),
-          ],
+          ),
         ),
       ),
     );

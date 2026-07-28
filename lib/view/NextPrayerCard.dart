@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:myadhan/model/PrayerTimeModel.dart';
 import 'package:myadhan/providers/prayer_times_provider.dart';
+import 'package:myadhan/theme/app_colors.dart';
 import 'package:myadhan/view/AccentCard.dart';
 import 'package:myadhan/view/CountDown.dart';
 
@@ -19,9 +20,9 @@ class NextPrayerCard extends ConsumerStatefulWidget {
 }
 
 class _NextPrayerCardState extends ConsumerState<NextPrayerCard> {
-  static const _accent = Color(0xFF4DB3E5);
-  static const _muted = Color(0xFFD3E0EC);
-  static const _content = Color(0xFFF0F8FF);
+  static const _accent = AppColors.accent;
+  static const _muted = AppColors.secondary;
+  static const _content = AppColors.heading;
 
   static const _prayerTimeKeys = {
     'الفجر': 'fajer',

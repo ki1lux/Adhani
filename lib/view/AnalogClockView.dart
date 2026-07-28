@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:myadhan/controller/ClockController.dart';
 import 'package:myadhan/model/ClockModel.dart';
+import 'package:myadhan/theme/app_colors.dart';
 
 /// A purely decorative analog clock face. The digital time is not rendered
 /// here — a parent renders its own accessible time text via [onTick], so
@@ -75,7 +76,7 @@ class ClockPainter extends CustomPainter {
 
     final paintCircle =
         Paint()
-          ..color = Color(0xffD3E0EC)
+          ..color = AppColors.archBottom
           ..style = PaintingStyle.fill;
 
     canvas.drawCircle(center, radius / 2, paintCircle);
@@ -84,7 +85,7 @@ class ClockPainter extends CustomPainter {
     // stay legible against the light card (previous contrast was ~1.25:1).
     final tickPaint =
         Paint()
-          ..color = const Color(0xFF283F54).withValues(alpha: 0.35)
+          ..color = AppColors.onLight.withValues(alpha: 0.35)
           ..strokeWidth = 3.3;
 
     for (int i = 0; i < 60; i++) {
@@ -108,7 +109,7 @@ class ClockPainter extends CustomPainter {
     );
     final hourPaint =
         Paint()
-          ..color = Color(0xff283F54)
+          ..color = AppColors.onLight
           ..strokeWidth = 6
           ..strokeCap = StrokeCap.round;
     canvas.drawLine(center, hourHand, hourPaint);
@@ -121,7 +122,7 @@ class ClockPainter extends CustomPainter {
     );
     final minutePaint =
         Paint()
-          ..color = Color(0xff283F54)
+          ..color = AppColors.onLight
           ..strokeWidth = 6
           ..strokeCap = StrokeCap.round;
     canvas.drawLine(center, minuteHand, minutePaint);
@@ -136,7 +137,7 @@ class ClockPainter extends CustomPainter {
     );
     final secondPaint =
         Paint()
-          ..color = Color(0xff283F54)
+          ..color = AppColors.onLight
           ..strokeWidth = 2
           ..strokeCap = StrokeCap.round;
 
@@ -148,9 +149,9 @@ class ClockPainter extends CustomPainter {
     canvas.drawLine(secondHandTail, secondHand, secondPaint);
 
     // دائرة في المنتصف
-    final centerDot = Paint()..color = Color(0xff283F54);
+    final centerDot = Paint()..color = AppColors.onLight;
     canvas.drawCircle(center, 6.5, centerDot);
-    final additionalCenterDot = Paint()..color = Color(0xffD3E0EC);
+    final additionalCenterDot = Paint()..color = AppColors.archBottom;
     canvas.drawCircle(center, 3, additionalCenterDot);
   }
 

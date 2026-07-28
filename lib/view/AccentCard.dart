@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:myadhan/theme/app_colors.dart';
 
 /// Adhani's shared "this is the active/next one" visual treatment: an
 /// asymmetric-radius card with a thin accent edge and a slow breathing
@@ -15,8 +16,8 @@ class AccentCard extends StatefulWidget {
   const AccentCard({
     super.key,
     required this.child,
-    this.color = const Color(0xFF283F54),
-    this.accentColor = const Color(0xFF4DB3E5),
+    this.color = AppColors.cardFill,
+    this.accentColor = AppColors.accent,
     this.borderRadius = const BorderRadius.only(
       topLeft: Radius.circular(36),
       topRight: Radius.circular(12),
@@ -66,6 +67,7 @@ class _AccentCardState extends State<AccentCard>
             decoration: BoxDecoration(
               color: widget.color,
               borderRadius: widget.borderRadius,
+              border: Border.all(color: AppColors.accentBorderSoft),
               boxShadow: [
                 BoxShadow(
                   color: widget.accentColor.withValues(alpha: glow),

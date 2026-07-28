@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:myadhan/controller/QiblahController.dart';
+import 'package:myadhan/theme/app_colors.dart';
+import 'package:myadhan/view/AppBackground.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_qiblah/flutter_qiblah.dart';
 
@@ -181,17 +183,17 @@ class _QiblaScreenState extends State<QiblaScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        backgroundColor: const Color(0xff0A2239),
+        backgroundColor: AppColors.surface,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(color: Colors.white),
+              const CircularProgressIndicator(color: AppColors.body),
               const SizedBox(height: 24),
               const Text(
                 'جاري التحميل...',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.body,
                   fontFamily: 'Cairo',
                   fontSize: 16,
                 ),
@@ -204,19 +206,19 @@ class _QiblaScreenState extends State<QiblaScreen> {
 
     if (!_isCompassSupported) {
       return Scaffold(
-        backgroundColor: const Color(0xff0A2239),
+        backgroundColor: AppColors.surface,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, color: Colors.white54, size: 64),
+              const Icon(Icons.error_outline, color: AppColors.label, size: 64),
               const SizedBox(height: 16),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 32),
                 child: Text(
                   "جهازك لا يحتوي على مستشعر البوصلة",
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.body,
                     fontSize: 16,
                     fontFamily: 'Cairo',
                   ),
@@ -231,19 +233,19 @@ class _QiblaScreenState extends State<QiblaScreen> {
 
     if (!_hasPermission) {
       return Scaffold(
-        backgroundColor: const Color(0xff0A2239),
+        backgroundColor: AppColors.surface,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.location_off, color: Colors.white54, size: 64),
+              const Icon(Icons.location_off, color: AppColors.label, size: 64),
               const SizedBox(height: 16),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 32),
                 child: Text(
                   "يجب السماح بإذن الموقع لاستخدام البوصلة",
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.body,
                     fontSize: 16,
                     fontFamily: 'Cairo',
                   ),
@@ -259,8 +261,8 @@ class _QiblaScreenState extends State<QiblaScreen> {
                   style: TextStyle(fontFamily: 'Cairo'),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white24,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppColors.cardFill,
+                  foregroundColor: AppColors.body,
                 ),
               ),
             ],
@@ -276,15 +278,12 @@ class _QiblaScreenState extends State<QiblaScreen> {
         statusBarBrightness: Brightness.dark, // White icons on iOS
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xff0A2239),
-        body: Stack(
+        backgroundColor: AppColors.surface,
+        // Shared navy glow + pattern, replacing this screen's own
+        // flat-fill + full-bleed Vector.svg stack.
+        body: AppBackground(
+          child: Stack(
           children: [
-            SvgPicture.asset(
-              'assets/Vector.svg',
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-            ),
             Center(
               child: Builder(
                 builder: (context) {
@@ -367,10 +366,17 @@ class _QiblaScreenState extends State<QiblaScreen> {
                                   fontSize: 28,
                                   fontFamily: 'cairo',
                                   fontWeight: FontWeight.bold,
+                                  // Identity's success/aligned token
+                                  // (DESIGN_IDENTITY.md §1) — not
+                                  // Colors.green, which has no home in
+                                  // this palette.
+                                  // This text sits on the light dial, so
+                                  // its resting color is the on-light
+                                  // token, not the dark surface color.
                                   color:
                                       isPointingToQibla
-                                          ? Colors.green
-                                          : const Color(0xff0A2239),
+                                          ? AppColors.success
+                                          : AppColors.onLight,
                                 ),
                               ),
                               if (isPointingToQibla)
@@ -380,7 +386,7 @@ class _QiblaScreenState extends State<QiblaScreen> {
                                     fontSize: 16,
                                     fontFamily: 'cairo',
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.green,
+                                    color: AppColors.success,
                                   ),
                                 ),
                             ],
@@ -406,14 +412,23 @@ class _QiblaScreenState extends State<QiblaScreen> {
                     await Future.delayed(const Duration(milliseconds: 600));
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
+                        SnackBar(
+                          content: const Text(
                             'تم إعادة التهيئة بنجاح.',
-                            style: TextStyle(fontFamily: 'Cairo'),
+                            style: TextStyle(
+                              fontFamily: 'cairo',
+                              color: AppColors.body,
+                            ),
                             textAlign: TextAlign.center,
                           ),
-                          duration: Duration(seconds: 3),
-                          backgroundColor: Color(0xff0A2239),
+                          duration: const Duration(seconds: 3),
+                          // Matches PrayerTimeScreen's snackbar treatment —
+                          // same component, same role, same look.
+                          backgroundColor: AppColors.sheetTop,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       );
                     }
@@ -425,8 +440,8 @@ class _QiblaScreenState extends State<QiblaScreen> {
                     style: TextStyle(fontFamily: 'Cairo', fontSize: 14),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.05),
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppColors.body.withValues(alpha: 0.05),
+                    foregroundColor: AppColors.body,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(25),
                     ),
@@ -440,6 +455,7 @@ class _QiblaScreenState extends State<QiblaScreen> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

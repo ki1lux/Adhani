@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:myadhan/theme/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
   final Widget nextScreen;
@@ -125,7 +126,7 @@ class _SplashScreenState extends State<SplashScreen>
                       Container(
                         width: 160, height: 160,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF0F8FF),
+                          color: AppColors.archTop,
                           borderRadius: BorderRadius.circular(36),
                           boxShadow: [BoxShadow(
                             color: Colors.black.withValues(alpha: 0.4),

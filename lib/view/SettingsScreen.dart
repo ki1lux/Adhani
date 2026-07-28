@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:myadhan/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,7 +32,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         statusBarBrightness: Brightness.dark,        // White icons on iOS
       ),
       child: Scaffold(
-      backgroundColor: const Color(0xff0A2239),
+      backgroundColor: AppColors.surface,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
@@ -63,11 +64,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           isFullScreen = val;
                         });
                       },
-                      activeThumbColor: Colors.white,
+                      activeThumbColor: AppColors.body,
                       title: const Text(
                         "Full screen notif",
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppColors.body,
                           fontSize: 16,
                           fontFamily: 'cairo',
                           fontWeight: FontWeight.w500,
@@ -75,7 +76,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       secondary: const Icon(
                         Icons.notifications,
-                        color: Colors.white,
+                        color: AppColors.body,
                       ),
                     ),
                   ),
@@ -98,13 +99,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                 const SizedBox(height: 32),
 
-                const Divider(color: Colors.white24),
+                const Divider(color: AppColors.cardFill),
                 SizedBox(height: 5),
                 Center(
                   child: const Text(
                     "Designed & Devloped by :",
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.body,
                       fontSize: 24,
                       fontFamily: 'cairo',
                       fontWeight: FontWeight.bold,
@@ -126,7 +127,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   },
                   child: Icon(
                     Icons.link,
-                    color: Colors.white,
+                    color: AppColors.body,
                     size: 32,
                   ),
                 ),
@@ -134,7 +135,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const Text(
                   "khalilbenfiala001@gmail.com",
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.body,
                     fontSize: 12,
                     fontFamily: 'cairo',
                     fontWeight: FontWeight.w500,
@@ -154,7 +155,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       padding: const EdgeInsets.only(bottom: 12.0),
       child: Material(
         borderRadius: BorderRadius.circular(24),
-        color: const Color(0xFF2D4356),
+        color: AppColors.sheetTop,
         child: InkWell(
           borderRadius: BorderRadius.circular(24),
           onTap: onTap,
@@ -163,12 +164,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             child: Row(
               children: [
-                Icon(icon, color: Colors.white, size: 28),
+                Icon(icon, color: AppColors.body, size: 28),
                 const SizedBox(width: 16),
                 Text(
                   title,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.body,
                     fontSize: 16,
                     fontFamily: 'cairo',
                     fontWeight: FontWeight.w500,
@@ -184,7 +185,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   BoxDecoration _tileDecoration() {
     return BoxDecoration(
-      color: const Color(0xFF2D4356),
+      color: AppColors.sheetTop,
       borderRadius: BorderRadius.circular(24),
     );
   }
@@ -194,10 +195,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF2D4356),
+          backgroundColor: AppColors.sheetTop,
           title: Text(
             'Prayer Alarm Status',
-            style: TextStyle(color: Colors.white, fontFamily: 'cairo'),
+            style: TextStyle(color: AppColors.body, fontFamily: 'cairo'),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -217,7 +218,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           Text(
                             prayerName,
                             style: TextStyle(
-                              color: Colors.white,
+                              color: AppColors.body,
                               fontFamily: 'cairo',
                               fontSize: 16,
                             ),
@@ -227,7 +228,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 ? 'Tomorrow $nextOccurrence'
                                 : 'Today ${data['time']}',
                             style: TextStyle(
-                              color: isPassed ? Colors.orange : Colors.green,
+                              color: isPassed ? AppColors.warning : AppColors.success,
                               fontFamily: 'cairo',
                               fontSize: 14,
                             ),
@@ -243,7 +244,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
                 'Close',
-                style: TextStyle(color: Colors.white, fontFamily: 'cairo'),
+                style: TextStyle(color: AppColors.body, fontFamily: 'cairo'),
               ),
             ),
           ],
@@ -257,11 +258,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF2D4356),
+          backgroundColor: AppColors.sheetTop,
           title: Text(
             'استكشاف الأخطاء وإصلاحها',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.body,
               fontFamily: 'cairo',
               fontWeight: FontWeight.bold,
             ),
@@ -298,7 +299,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Text(
                   "نصيحة: إذا كان هاتفك من نوع Xiaomi أو Huawei، ابحث عن إعدادات 'التشغيل التلقائي' (Autostart) وقم بتفعيل التطبيق.",
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: AppColors.secondary,
                     fontSize: 12,
                     fontFamily: 'cairo',
                   ),
@@ -311,7 +312,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
                 'إغلاق',
-                style: TextStyle(color: Colors.white, fontFamily: 'cairo'),
+                style: TextStyle(color: AppColors.body, fontFamily: 'cairo'),
               ),
             ),
           ],
@@ -329,7 +330,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Text(
             title,
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.body,
               fontWeight: FontWeight.bold,
               fontSize: 15,
               fontFamily: 'cairo',
@@ -339,7 +340,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Text(
             desc,
             style: TextStyle(
-              color: Colors.white70,
+              color: AppColors.secondary,
               fontSize: 13,
               fontFamily: 'cairo',
             ),
@@ -369,23 +370,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xff0A2239),
+        backgroundColor: AppColors.surface,
         title: const Text(
           'تعطيل تحسين البطارية',
-          style: TextStyle(color: Colors.white, fontFamily: 'cairo'),
+          style: TextStyle(color: AppColors.body, fontFamily: 'cairo'),
           textAlign: TextAlign.center,
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.battery_alert, color: const Color(0xFF4DB3E5), size: 48),
+            const Icon(Icons.battery_alert, color: AppColors.accent, size: 48),
             const SizedBox(height: 16),
             const Text(
               'لضمان وصول إشعارات الصلاة في وقتها بدقة:\n\n'
               '1. اضغط "فتح الإعدادات"\n'
               '2. ابحث عن التطبيق واختر "غير مُحسّن"\n'
               '3. هذا يمنع Android من تأخير الإشعارات',
-              style: TextStyle(color: Colors.white70, fontFamily: 'cairo', height: 1.5),
+              style: TextStyle(color: AppColors.secondary, fontFamily: 'cairo', height: 1.5),
               textAlign: TextAlign.center,
             ),
           ],
@@ -393,7 +394,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+            child: const Text('إلغاء', style: TextStyle(color: AppColors.label)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -410,8 +411,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4DB3E5)),
-            child: const Text('فتح الإعدادات', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+            child: const Text('فتح الإعدادات', style: TextStyle(color: AppColors.body)),
           ),
         ],
       ),
@@ -453,11 +454,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF0E2031),
+          backgroundColor: AppColors.sheetBottom,
           title: const Text(
             'طريقة الحساب',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.body,
               fontFamily: 'Cairo',
               fontWeight: FontWeight.w700,
               fontSize: 24,
@@ -479,7 +480,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: Text(
                     name,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.body,
                       fontFamily: 'Cairo',
                       fontSize: 15,
                     ),
@@ -487,7 +488,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   subtitle: Text(
                     nameEn,
                     style: const TextStyle(
-                      color: Colors.white54,
+                      color: AppColors.label,
                       fontSize: 12,
                     ),
                   ),
@@ -509,7 +510,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: const Text(
                 'إلغاء',
                 style: TextStyle(
-                  color: Colors.white54,
+                  color: AppColors.label,
                   fontFamily: 'Cairo',
                   fontSize: 16,
                 ),
@@ -540,7 +541,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: const Text(
                 'حفظ',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.body,
                   fontFamily: 'Cairo',
                   fontSize: 16,
                 ),
