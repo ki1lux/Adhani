@@ -23,9 +23,12 @@ class AppBackground extends StatelessWidget {
   static const _bottomFade = Color(0xFF061726);
   static const _bottomDeep = Color(0xFF05131F);
 
-  /// How strongly the geometric pattern reads. The design brief calls for a
-  /// ~3.5% overlay; nudge this if the tiling feels too faint or too busy.
-  static const _patternOpacity = 0.05;
+  /// `Vector.svg` already bakes its own `<g opacity="0.51">` around every
+  /// path and its own dark-navy fill — that's the exact recipe every screen
+  /// used before this widget existed, and it read clearly against the navy
+  /// background. Stacking an extra `Opacity`/`ColorFilter` on top of that
+  /// (an earlier version of this file did) compounds the alpha down to a
+  /// few percent and makes the tiling disappear — so don't add either here.
 
   @override
   Widget build(BuildContext context) {
@@ -70,22 +73,15 @@ class AppBackground extends StatelessWidget {
           ),
         ),
         // Islamic geometric pattern overlay (assets/Vector.svg — a girih-style
-        // tiling). Tinted white at low opacity rather than drawn in its own
-        // baked-in dark navy, so it stays evenly visible across the whole
-        // gradient instead of disappearing into the dark bottom half.
+        // tiling). Drawn as-is, same as every screen did before this widget
+        // existed — its own dark-navy fill and baked-in group opacity are
+        // already tuned to read against this background.
         Positioned.fill(
           child: IgnorePointer(
-            child: Opacity(
-              opacity: _patternOpacity,
-              child: SvgPicture.asset(
-                'assets/Vector.svg',
-                fit: BoxFit.cover,
-                alignment: Alignment.topCenter,
-                colorFilter: const ColorFilter.mode(
-                  Colors.white,
-                  BlendMode.srcIn,
-                ),
-              ),
+            child: SvgPicture.asset(
+              'assets/Vector.svg',
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
             ),
           ),
         ),
