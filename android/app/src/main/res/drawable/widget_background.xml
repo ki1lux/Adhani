@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Vertical fade approximating AppBackground.dart's linear layer (the
+     radial glow on top of it isn't worth a bitmap for a widget this small).
+     Colors are hand-copied from lib/theme/app_colors.dart/AppBackground —
+     keep in sync if that gradient changes. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#0A2239" />
+    <gradient
+        android:angle="270"
+        android:startColor="#0F3348"
+        android:centerColor="#0A2740"
+        android:endColor="#05131F"
+        android:type="linear" />
     <corners android:radius="16dp" />
 </shape>

@@ -95,6 +95,7 @@ flutter:
     - assets/test.svg
     - assets/arrow.svg
     - assets/settingsIcon.svg
+    - assets/github.svg
     - assets/mainIcon.png
     - assets/audio/
     - assets/audio/effects/

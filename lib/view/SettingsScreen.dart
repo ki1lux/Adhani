@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:myadhan/theme/app_colors.dart';
+import 'package:myadhan/view/AppBackground.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,172 +10,175 @@ import 'package:myadhan/prayer_alarm_scheduler.dart';
 import 'package:myadhan/providers/prayer_times_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
+  const SettingsScreen({super.key});
+
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
-
-
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool isFullScreen = true;
   Map<String, dynamic> alarmStatus = {};
 
-  @override
-  void initState() {
-    super.initState();
-  }
+  // Shared with the rest of the app: rows and dialogs use the same
+  // translucent fill + hairline border as PrayerTimeScreen's cards and
+  // QiblaScreen's bar, instead of this screen's old opaque sheetTop tiles.
+  static final _rowRadius = BorderRadius.circular(16);
+  static final _dialogShape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(24),
+  );
 
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,  // White icons on Android
-        statusBarBrightness: Brightness.dark,        // White icons on iOS
+        statusBarIconBrightness: Brightness.light, // White icons on Android
+        statusBarBrightness: Brightness.dark, // White icons on iOS
       ),
       child: Scaffold(
-      backgroundColor: AppColors.surface,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                SizedBox(height: 6),
+        backgroundColor: AppColors.surface,
+        // The shared navy glow + Islamic pattern every other screen uses —
+        // this one was still painting a flat fill.
+        body: AppBackground(
+          child: SafeArea(
+            child: Directionality(
+              // Arabic-first, like the rest of the app: icons lead on the
+              // right, text reads right-to-left.
+              textDirection: TextDirection.rtl,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 24),
 
-                Text(
-                  "Settings",
-                  style: TextStyle(
-                    color: Colors.blueGrey,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12.0),
-                  child: Container(
-                    alignment: Alignment.center,
-                    height: 64,
-                    decoration: _tileDecoration(),
-                    child: SwitchListTile(
-                      value: isFullScreen,
-                      onChanged: (val) {
-                        setState(() {
-                          isFullScreen = val;
-                        });
-                      },
-                      activeThumbColor: AppColors.body,
-                      title: const Text(
-                        "Full screen notif",
-                        style: TextStyle(
-                          color: AppColors.body,
-                          fontSize: 16,
-                          fontFamily: 'cairo',
-                          fontWeight: FontWeight.w500,
-                        ),
+                      _sectionLabel('التنبيهات'),
+                      _buildSwitchRow(
+                        Icons.notifications_outlined,
+                        'إشعار ملء الشاشة',
+                        isFullScreen,
+                        (val) => setState(() => isFullScreen = val),
                       ),
-                      secondary: const Icon(
-                        Icons.notifications,
-                        color: AppColors.body,
+                      _buildRow(
+                        Icons.info_outline,
+                        'حالة التنبيهات',
+                        _showAlarmStatusDialog,
                       ),
-                    ),
-                  ),
-                ),
-                _settingsButtons(Icons.share, "Share App", () {}),
-                _settingsButtons(Icons.star, "Rate App", () {}),
-                _settingsButtons(Icons.info, "Alarm Status", () {
-                  _showAlarmStatusDialog();
-                }),
-                _settingsButtons(Icons.build, "Troubleshoot Alarm", () {
-                  _showTroubleshootDialog();
-                }),
-                _settingsButtons(Icons.battery_alert, "تعطيل تحسين البطارية", () {
-                  _openBatteryOptimizationSettings();
-                }),
-                _settingsButtons(Icons.calculate, "طريقة الحساب", () {
-                  _showCalculationMethodDialog();
-                }),
-                _settingsButtons(Icons.mosque, "Adhani\nversion : 1.0", () {}),
+                      _buildRow(
+                        Icons.build_outlined,
+                        'إصلاح مشاكل التنبيه',
+                        _showTroubleshootDialog,
+                      ),
+                      _buildRow(
+                        Icons.battery_alert_outlined,
+                        'تعطيل تحسين البطارية',
+                        _openBatteryOptimizationSettings,
+                      ),
+                      _buildRow(
+                        Icons.widgets_outlined,
+                        'تحديث الودجت الآن',
+                        _refreshWidget,
+                      ),
 
-                const SizedBox(height: 32),
+                      const SizedBox(height: 24),
+                      _sectionLabel('مواقيت الصلاة'),
+                      _buildRow(
+                        Icons.calculate_outlined,
+                        'طريقة الحساب',
+                        _showCalculationMethodDialog,
+                      ),
 
-                const Divider(color: AppColors.cardFill),
-                SizedBox(height: 5),
-                Center(
-                  child: const Text(
-                    "Designed & Devloped by :",
-                    style: TextStyle(
-                      color: AppColors.body,
-                      fontSize: 24,
-                      fontFamily: 'cairo',
-                      fontWeight: FontWeight.bold,
-                    ),
+                      const SizedBox(height: 24),
+                      _sectionLabel('التطبيق'),
+                      _buildRow(Icons.share_outlined, 'مشاركة التطبيق', () {}),
+                      _buildRow(Icons.star_outline, 'تقييم التطبيق', () {}),
+
+                      const SizedBox(height: 36),
+                      _buildCredits(),
+                      // Clears the floating bottom nav bar (MainScreen's
+                      // Scaffold uses extendBody: true) — without this the
+                      // last rows sat underneath it.
+                      const SizedBox(height: 100),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                InkWell(
-                  onTap: () async {
-                    final url = Uri.parse("https://github.com/ki1lux");
-                    if (await canLaunchUrl(url)) {
-                      await launchUrl(
-                        url,
-                        mode: LaunchMode.externalApplication,
-                      );
-                    } else {
-                      throw 'Could not launch $url';
-                    }
-                  },
-                  child: Icon(
-                    Icons.link,
-                    color: AppColors.body,
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  "khalilbenfiala001@gmail.com",
-                  style: TextStyle(
-                    color: AppColors.body,
-                    fontSize: 12,
-                    fontFamily: 'cairo',
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return const Align(
+      alignment: Alignment.centerRight,
+      child: Text(
+        'الإعدادات',
+        style: TextStyle(
+          fontFamily: 'cairo',
+          fontWeight: FontWeight.bold,
+          fontSize: 18,
+          color: AppColors.body,
+        ),
       ),
     );
   }
 
-  Widget _settingsButtons(IconData icon, String title, VoidCallback onTap) {
+  /// Groups the list into readable sections instead of one undifferentiated
+  /// stack of nine identical tiles.
+  Widget _sectionLabel(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.only(right: 4, bottom: 10),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontFamily: 'cairo',
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppColors.faint,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(IconData icon, String title, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        borderRadius: BorderRadius.circular(24),
-        color: AppColors.sheetTop,
+        color: AppColors.cardFill,
+        borderRadius: _rowRadius,
         child: InkWell(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: _rowRadius,
           onTap: onTap,
           child: Container(
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            decoration: BoxDecoration(
+              borderRadius: _rowRadius,
+              border: Border.all(color: AppColors.cardBorder),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             child: Row(
               children: [
-                Icon(icon, color: AppColors.body, size: 28),
-                const SizedBox(width: 16),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: AppColors.body,
-                    fontSize: 16,
-                    fontFamily: 'cairo',
-                    fontWeight: FontWeight.w500,
+                Icon(icon, color: AppColors.secondary, size: 22),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: AppColors.body,
+                      fontSize: 15,
+                      fontFamily: 'cairo',
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
+                ),
+                const Icon(
+                  Icons.chevron_left,
+                  color: AppColors.faint,
+                  size: 20,
                 ),
               ],
             ),
@@ -183,11 +188,149 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  BoxDecoration _tileDecoration() {
-    return BoxDecoration(
-      color: AppColors.sheetTop,
-      borderRadius: BorderRadius.circular(24),
+  Widget _buildSwitchRow(
+    IconData icon,
+    String title,
+    bool value,
+    ValueChanged<bool> onChanged,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.cardFill,
+          borderRadius: _rowRadius,
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.secondary, size: 22),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.body,
+                  fontSize: 15,
+                  fontFamily: 'cairo',
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              // Accent is reserved for genuine active/selected indicators —
+              // this is one.
+              activeThumbColor: AppColors.accent,
+              activeTrackColor: AppColors.accentFill,
+              inactiveThumbColor: AppColors.faint,
+              inactiveTrackColor: AppColors.cardBorder,
+              overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  Widget _buildCredits() {
+    return Column(
+      children: [
+        Divider(color: AppColors.cardBorder, height: 1),
+        const SizedBox(height: 20),
+        const Text(
+          'تصميم وتطوير',
+          style: TextStyle(
+            color: AppColors.muted,
+            fontSize: 13,
+            fontFamily: 'cairo',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: () async {
+              final url = Uri.parse("https://github.com/ki1lux");
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url, mode: LaunchMode.externalApplication);
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              // Material Icons has no GitHub mark, so this is a local SVG
+              // tinted through the palette like the app's other custom icons.
+              child: SvgPicture.asset(
+                'assets/github.svg',
+                width: 24,
+                height: 24,
+                colorFilter: const ColorFilter.mode(
+                  AppColors.secondary,
+                  BlendMode.srcIn,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          "khalilbenfiala001@gmail.com",
+          textDirection: TextDirection.ltr,
+          style: TextStyle(
+            color: AppColors.faint,
+            fontSize: 12,
+            fontFamily: 'cairo',
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Adhani · 1.0',
+          textDirection: TextDirection.ltr,
+          style: TextStyle(
+            color: AppColors.inactive,
+            fontSize: 11,
+            fontFamily: 'cairo',
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(fontFamily: 'cairo', color: AppColors.body),
+          textAlign: TextAlign.center,
+        ),
+        // Same floating treatment PrayerTimeScreen and QiblaScreen use.
+        backgroundColor: AppColors.sheetTop,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  /// Manual recourse for a stale home-screen widget. Calls the same
+  /// `rescheduleFromPrefs` native method every writer of prayer data already
+  /// ends with (see CLAUDE.md's "three independent writers" section) —
+  /// `AlarmSchedulerHelper.rescheduleAllFromPrefs` re-arms the widget-refresh
+  /// alarms *and* immediately broadcasts `ACTION_PRAYER_UPDATED`, which
+  /// `PrayerWidgetProvider` reacts to right away. Not a new mechanism, just
+  /// user-triggered access to the one that already exists.
+  Future<void> _refreshWidget() async {
+    const channel = MethodChannel('com.myadhan/notification');
+    try {
+      await channel.invokeMethod('rescheduleFromPrefs');
+      if (mounted) _showSnack('تم تحديث الودجت ✅');
+    } catch (e) {
+      if (mounted) _showSnack('تعذر تحديث الودجت');
+    }
   }
 
   void _showAlarmStatusDialog() {
@@ -196,55 +339,80 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: AppColors.sheetTop,
-          title: Text(
-            'Prayer Alarm Status',
-            style: TextStyle(color: AppColors.body, fontFamily: 'cairo'),
+          // Material 3 tints dialog surfaces by default, which made this
+          // screen's dialogs a different shade from the rest of the app's.
+          surfaceTintColor: Colors.transparent,
+          shape: _dialogShape,
+          title: const Text(
+            'حالة تنبيهات الصلاة',
+            style: TextStyle(
+              color: AppColors.heading,
+              fontFamily: 'cairo',
+              fontWeight: FontWeight.bold,
+            ),
           ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children:
-                  alarmStatus.entries.map((entry) {
-                    final prayerName = entry.key;
-                    final data = entry.value as Map<String, dynamic>;
-                    final isPassed = data['isPassed'] as bool;
-                    final nextOccurrence = data['nextOccurrence'] as String;
+                  alarmStatus.isEmpty
+                      ? [
+                        const Text(
+                          'لا تتوفر بيانات عن التنبيهات حاليًا.',
+                          style: TextStyle(
+                            color: AppColors.secondary,
+                            fontFamily: 'cairo',
+                            fontSize: 14,
+                          ),
+                        ),
+                      ]
+                      : alarmStatus.entries.map((entry) {
+                        final prayerName = entry.key;
+                        final data = entry.value as Map<String, dynamic>;
+                        final isPassed = data['isPassed'] as bool;
+                        final nextOccurrence = data['nextOccurrence'] as String;
 
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            prayerName,
-                            style: TextStyle(
-                              color: AppColors.body,
-                              fontFamily: 'cairo',
-                              fontSize: 16,
-                            ),
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                prayerName,
+                                style: const TextStyle(
+                                  color: AppColors.body,
+                                  fontFamily: 'cairo',
+                                  fontSize: 16,
+                                ),
+                              ),
+                              Text(
+                                isPassed
+                                    ? 'غدًا $nextOccurrence'
+                                    : 'اليوم ${data['time']}',
+                                style: TextStyle(
+                                  color:
+                                      isPassed
+                                          ? AppColors.warning
+                                          : AppColors.success,
+                                  fontFamily: 'cairo',
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            isPassed
-                                ? 'Tomorrow $nextOccurrence'
-                                : 'Today ${data['time']}',
-                            style: TextStyle(
-                              color: isPassed ? AppColors.warning : AppColors.success,
-                              fontFamily: 'cairo',
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                        );
+                      }).toList(),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Close',
-                style: TextStyle(color: AppColors.body, fontFamily: 'cairo'),
+              child: const Text(
+                'إغلاق',
+                style: TextStyle(
+                  color: AppColors.secondary,
+                  fontFamily: 'cairo',
+                ),
               ),
             ),
           ],
@@ -259,10 +427,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: AppColors.sheetTop,
-          title: Text(
+          surfaceTintColor: Colors.transparent,
+          shape: _dialogShape,
+          title: const Text(
             'استكشاف الأخطاء وإصلاحها',
             style: TextStyle(
-              color: AppColors.body,
+              color: AppColors.heading,
               fontFamily: 'cairo',
               fontWeight: FontWeight.bold,
             ),
@@ -276,32 +446,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   "1. إذن التنبيه الدقيق (Exact Alarm)",
                   "تأكد من تفعيل هذا الإذن لضمان عمل الأذان في وقته الدقيق.",
                   () async {
-                    bool granted = await PrayerAlarmScheduler.checkExactAlarmPermission();
+                    bool granted =
+                        await PrayerAlarmScheduler.checkExactAlarmPermission();
                     if (!granted) {
                       await PrayerAlarmScheduler.requestExactAlarmPermission();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('الإذن مفعل بالفعل ✅')),
-                      );
+                    } else if (mounted) {
+                      _showSnack('الإذن مفعل بالفعل ✅');
                     }
                   },
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 _buildTroubleshootItem(
                   "2. تحسين البطارية (Battery Optimization)",
                   "بعض الهواتف توقف التطبيق في الخلفية. يرجى استثناء التطبيق من تحسين البطارية.",
                   () async {
-                     const channel = MethodChannel('com.myadhan/notification');
-                     await channel.invokeMethod('openBatterySettings');
+                    const channel = MethodChannel('com.myadhan/notification');
+                    await channel.invokeMethod('openBatterySettings');
                   },
                 ),
-                SizedBox(height: 16),
-                Text(
+                const SizedBox(height: 16),
+                const Text(
                   "نصيحة: إذا كان هاتفك من نوع Xiaomi أو Huawei، ابحث عن إعدادات 'التشغيل التلقائي' (Autostart) وقم بتفعيل التطبيق.",
                   style: TextStyle(
                     color: AppColors.secondary,
                     fontSize: 12,
                     fontFamily: 'cairo',
+                    height: 1.5,
                   ),
                 ),
               ],
@@ -310,9 +480,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(
+              child: const Text(
                 'إغلاق',
-                style: TextStyle(color: AppColors.body, fontFamily: 'cairo'),
+                style: TextStyle(
+                  color: AppColors.secondary,
+                  fontFamily: 'cairo',
+                ),
               ),
             ),
           ],
@@ -329,33 +502,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         children: [
           Text(
             title,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppColors.body,
               fontWeight: FontWeight.bold,
               fontSize: 15,
               fontFamily: 'cairo',
             ),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
             desc,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppColors.secondary,
               fontSize: 13,
               fontFamily: 'cairo',
+              height: 1.5,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.blueAccent.withValues(alpha: 0.2),
+              // Was Colors.blueAccent — off-palette. The identity's accent
+              // carries the "actionable" role everywhere else.
+              color: AppColors.accentFillSoft,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.5)),
+              border: Border.all(color: AppColors.accentBorderSoft),
             ),
-            child: Text(
+            child: const Text(
               "اضغط هنا للتحقق / الإصلاح",
-              style: TextStyle(color: Colors.blueAccent, fontSize: 12),
+              style: TextStyle(
+                color: AppColors.accent,
+                fontSize: 12,
+                fontFamily: 'cairo',
+              ),
             ),
           ),
         ],
@@ -369,53 +549,90 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Show explanation dialog first
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text(
-          'تعطيل تحسين البطارية',
-          style: TextStyle(color: AppColors.body, fontFamily: 'cairo'),
-          textAlign: TextAlign.center,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.battery_alert, color: AppColors.accent, size: 48),
-            const SizedBox(height: 16),
-            const Text(
-              'لضمان وصول إشعارات الصلاة في وقتها بدقة:\n\n'
-              '1. اضغط "فتح الإعدادات"\n'
-              '2. ابحث عن التطبيق واختر "غير مُحسّن"\n'
-              '3. هذا يمنع Android من تأخير الإشعارات',
-              style: TextStyle(color: AppColors.secondary, fontFamily: 'cairo', height: 1.5),
+      builder:
+          (context) => AlertDialog(
+            backgroundColor: AppColors.sheetTop,
+            surfaceTintColor: Colors.transparent,
+            shape: _dialogShape,
+            title: const Text(
+              'تعطيل تحسين البطارية',
+              style: TextStyle(
+                color: AppColors.heading,
+                fontFamily: 'cairo',
+                fontWeight: FontWeight.bold,
+              ),
               textAlign: TextAlign.center,
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء', style: TextStyle(color: AppColors.label)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.battery_alert_outlined,
+                  color: AppColors.accent,
+                  size: 44,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'لضمان وصول إشعارات الصلاة في وقتها بدقة:\n\n'
+                  '1. اضغط "فتح الإعدادات"\n'
+                  '2. ابحث عن التطبيق واختر "غير مُحسّن"\n'
+                  '3. هذا يمنع Android من تأخير الإشعارات',
+                  style: TextStyle(
+                    color: AppColors.secondary,
+                    fontFamily: 'cairo',
+                    height: 1.6,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'إلغاء',
+                  style: TextStyle(
+                    color: AppColors.label,
+                    fontFamily: 'cairo',
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  // Open battery optimization settings using native channel
+                  try {
+                    const channel = MethodChannel('com.myadhan/notification');
+                    await channel.invokeMethod('openBatterySettings');
+                  } catch (e) {
+                    // Fallback: open general Android settings
+                    final uri = Uri.parse('package:com.example.myadhan');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  // Near-white fill with dark text, matching the primary
+                  // action in PrayerTimeScreen's dialogs — accent-on-accent
+                  // buttons were part of this app's over-reliance on blue.
+                  backgroundColor: AppColors.body,
+                  foregroundColor: AppColors.surface,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'فتح الإعدادات',
+                  style: TextStyle(
+                    fontFamily: 'cairo',
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              // Open battery optimization settings using native channel
-              try {
-                const channel = MethodChannel('com.myadhan/notification');
-                await channel.invokeMethod('openBatterySettings');
-              } catch (e) {
-                // Fallback: open general Android settings
-                final uri = Uri.parse('package:com.example.myadhan');
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri);
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-            child: const Text('فتح الإعدادات', style: TextStyle(color: AppColors.body)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -449,107 +666,160 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _showCalculationMethodDialog() async {
     final prefs = await SharedPreferences.getInstance();
     int currentMethod = prefs.getInt('calculation_method') ?? 19;
+    if (!mounted) return;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: AppColors.sheetBottom,
-          title: const Text(
-            'طريقة الحساب',
-            style: TextStyle(
-              color: AppColors.body,
-              fontFamily: 'Cairo',
-              fontWeight: FontWeight.w700,
-              fontSize: 24,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 400,
-            child: ListView.builder(
-              itemCount: _calculationMethods.length,
-              itemBuilder: (context, index) {
-                final method = _calculationMethods[index];
-                final id = method['id'] as int;
-                final name = method['name'] as String;
-                final nameEn = method['nameEn'] as String;
-                // ignore: deprecated_member_use
-                return RadioListTile<int>(
-                  title: Text(
-                    name,
-                    style: const TextStyle(
-                      color: AppColors.body,
-                      fontFamily: 'Cairo',
-                      fontSize: 15,
+      builder:
+          (context) => StatefulBuilder(
+            builder:
+                (context, setDialogState) => AlertDialog(
+                  backgroundColor: AppColors.sheetTop,
+                  surfaceTintColor: Colors.transparent,
+                  shape: _dialogShape,
+                  title: const Text(
+                    'طريقة الحساب',
+                    style: TextStyle(
+                      color: AppColors.heading,
+                      fontFamily: 'cairo',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  content: SizedBox(
+                    width: double.maxFinite,
+                    height: 400,
+                    child: ListView.builder(
+                      itemCount: _calculationMethods.length,
+                      itemBuilder: (context, index) {
+                        final method = _calculationMethods[index];
+                        final id = method['id'] as int;
+                        final name = method['name'] as String;
+                        final nameEn = method['nameEn'] as String;
+                        final selected = id == currentMethod;
+
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap:
+                                () => setDialogState(() => currentMethod = id),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 10,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    selected
+                                        ? Icons.radio_button_checked
+                                        : Icons.radio_button_unchecked,
+                                    size: 20,
+                                    // Accent marks the genuinely selected
+                                    // item — the old hardcoded #0768C5 sat
+                                    // outside the palette entirely.
+                                    color:
+                                        selected
+                                            ? AppColors.accent
+                                            : AppColors.faint,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name,
+                                          style: TextStyle(
+                                            color:
+                                                selected
+                                                    ? AppColors.heading
+                                                    : AppColors.body,
+                                            fontFamily: 'cairo',
+                                            fontSize: 15,
+                                            fontWeight:
+                                                selected
+                                                    ? FontWeight.w600
+                                                    : FontWeight.w400,
+                                          ),
+                                        ),
+                                        Text(
+                                          nameEn,
+                                          textDirection: TextDirection.ltr,
+                                          style: const TextStyle(
+                                            color: AppColors.faint,
+                                            fontFamily: 'cairo',
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                  subtitle: Text(
-                    nameEn,
-                    style: const TextStyle(
-                      color: AppColors.label,
-                      fontSize: 12,
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text(
+                        'إلغاء',
+                        style: TextStyle(
+                          color: AppColors.label,
+                          fontFamily: 'cairo',
+                          fontSize: 15,
+                        ),
+                      ),
                     ),
-                  ),
-                  value: id,
-                  // ignore: deprecated_member_use
-                  groupValue: currentMethod,
-                  activeColor: const Color(0xFF0768C5),
-                  // ignore: deprecated_member_use
-                  onChanged: (value) {
-                    setDialogState(() => currentMethod = value!);
-                  },
-                );
-              },
-            ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        await prefs.setInt('calculation_method', currentMethod);
+                        if (context.mounted) Navigator.pop(context);
+
+                        // Refresh prayer times with new method
+                        ref
+                            .read(prayerTimesProvider.notifier)
+                            .fetchPrayerTimes();
+
+                        // Reschedule alarms after prayer provider updates
+                        final prayerTimesAsync = ref.read(prayerTimesProvider);
+                        if (prayerTimesAsync.hasValue) {
+                          await PrayerAlarmScheduler.scheduleAllPrayersWithData(
+                            prayerTimesAsync.value!,
+                          );
+                        }
+
+                        if (mounted) {
+                          _showSnack('تم تغيير طريقة الحساب ✅');
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.body,
+                        foregroundColor: AppColors.surface,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'حفظ',
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'إلغاء',
-                style: TextStyle(
-                  color: AppColors.label,
-                  fontFamily: 'Cairo',
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () async {
-                await prefs.setInt('calculation_method', currentMethod);
-                Navigator.pop(context);
-
-                // Refresh prayer times with new method
-                ref.read(prayerTimesProvider.notifier).fetchPrayerTimes();
-
-                // Reschedule alarms after prayer provider updates
-                final prayerTimesAsync = ref.read(prayerTimesProvider);
-                if (prayerTimesAsync.hasValue) {
-                  await PrayerAlarmScheduler.scheduleAllPrayersWithData(
-                    prayerTimesAsync.value!,
-                  );
-                }
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم تغيير طريقة الحساب ✅')),
-                  );
-                }
-              },
-              child: const Text(
-                'حفظ',
-                style: TextStyle(
-                  color: AppColors.body,
-                  fontFamily: 'Cairo',
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

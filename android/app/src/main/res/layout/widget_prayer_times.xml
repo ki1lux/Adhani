@@ -1,171 +1,294 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Colors here are hand-copied from lib/theme/app_colors.dart since
+     RemoteViews layouts can't reference Dart constants — keep the two in
+     sync if the palette changes. surface=#0A2740, heading=#FFFFFF,
+     body=#E6F1F9, muted=#A9C3D6, faint=#7D97AD, accent=#7AD2F7. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
     android:background="@drawable/widget_background"
-    android:padding="16dp">
+    android:padding="10dp">
 
-    <!-- TOP: Next Prayer Time -->
-    <TextView
-        android:id="@+id/widget_next_prayer_name"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="#F0F8FF"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="16dp"
-        android:text="Loading..." />
-
-    <!-- MIDDLE: Row of All Prayers -->
+    <!-- Header: the prayer/countdown block, with the progress ring at the end -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:weightSum="5"
-        android:layout_marginBottom="16dp">
+        android:gravity="center_vertical">
 
-        <!-- Prayer 1 -->
         <LinearLayout
-            android:id="@+id/row_prayer_1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <!-- Name + time share one line. RTL so the icon leads on the
+                 right and the time trails on the left. -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layoutDirection="rtl"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:id="@+id/widget_prayer_icon"
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:layout_marginEnd="6dp"
+                    android:src="@drawable/ic_widget_moon"
+                    android:tint="#A9C3D6" />
+                <TextView
+                    android:id="@+id/widget_next_prayer_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFFFFF"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    android:text="جارٍ التحميل" />
+                <TextView
+                    android:id="@+id/widget_next_prayer_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:includeFontPadding="false"
+                    android:textColor="#A9C3D6"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:text="--:--" />
+            </LinearLayout>
+
+            <!-- Countdown + its label also share one line. Left-to-right so
+                 the digits sit first and the Arabic caption trails them. -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <Chronometer
+                    android:id="@+id/widget_countdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:countDown="true"
+                    android:format="%s" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:textColor="#A9C3D6"
+                    android:textSize="11sp"
+                    android:text="متبقّية للأذان" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/widget_date_line"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="#7D97AD"
+                android:textSize="10sp"
+                android:text="" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="56dp"
+            android:layout_height="56dp">
+            <ImageView
+                android:id="@+id/widget_progress_ring"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:orientation="vertical"
+                android:gravity="center">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:id="@+id/widget_progress_percent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:includeFontPadding="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:text="--" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:includeFontPadding="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="9sp"
+                        android:textStyle="bold"
+                        android:text="%" />
+                </LinearLayout>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:textColor="#7D97AD"
+                    android:textSize="7sp"
+                    android:text="من الفترة" />
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Timeline. Drawn as a bitmap rather than a ProgressBar because the
+         knob marking the current position can't be expressed with a
+         clip-based progress drawable. -->
+    <ImageView
+        android:id="@+id/widget_progress_line"
+        android:layout_width="match_parent"
+        android:layout_height="11dp"
+        android:layout_marginTop="8dp"
+        android:scaleType="fitXY" />
+
+    <!-- Today's five prayers. layoutDirection=rtl mirrors the declaration
+         order (Fajr..Isha) so Fajr renders on the right and Isha on the
+         left, matching Arabic reading direction for a day timeline —
+         PrayerWidgetProvider.kt's id lookups are unaffected since they key
+         off view IDs, not position. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:orientation="horizontal"
+        android:layoutDirection="rtl"
+        android:weightSum="5">
+
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center"
-            android:padding="6dp">
+            android:gravity="center">
             <TextView
                 android:id="@+id/text_name_1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#F0F8FF"
-                android:textSize="12sp"
+                android:textColor="#E6F1F9"
+                android:textSize="10sp"
                 android:text="الفجر" />
             <TextView
                 android:id="@+id/text_time_1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#F0F8FF"
+                android:layout_marginTop="1dp"
+                android:includeFontPadding="false"
+                android:textColor="#E6F1F9"
                 android:textSize="12sp"
-                android:layout_marginTop="2dp"
+                android:textStyle="bold"
                 android:text="--:--" />
         </LinearLayout>
 
-        <!-- Prayer 2 -->
         <LinearLayout
-            android:id="@+id/row_prayer_2"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center"
-            android:padding="6dp">
+            android:gravity="center">
             <TextView
                 android:id="@+id/text_name_2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#F0F8FF"
-                android:textSize="12sp"
+                android:textColor="#E6F1F9"
+                android:textSize="10sp"
                 android:text="الظهر" />
             <TextView
                 android:id="@+id/text_time_2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#F0F8FF"
+                android:layout_marginTop="1dp"
+                android:includeFontPadding="false"
+                android:textColor="#E6F1F9"
                 android:textSize="12sp"
-                android:layout_marginTop="2dp"
+                android:textStyle="bold"
                 android:text="--:--" />
         </LinearLayout>
 
-        <!-- Prayer 3 -->
         <LinearLayout
-            android:id="@+id/row_prayer_3"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center"
-            android:padding="6dp">
+            android:gravity="center">
             <TextView
                 android:id="@+id/text_name_3"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#F0F8FF"
-                android:textSize="12sp"
+                android:textColor="#E6F1F9"
+                android:textSize="10sp"
                 android:text="العصر" />
             <TextView
                 android:id="@+id/text_time_3"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#F0F8FF"
+                android:layout_marginTop="1dp"
+                android:includeFontPadding="false"
+                android:textColor="#E6F1F9"
                 android:textSize="12sp"
-                android:layout_marginTop="2dp"
+                android:textStyle="bold"
                 android:text="--:--" />
         </LinearLayout>
 
-        <!-- Prayer 4 -->
         <LinearLayout
-            android:id="@+id/row_prayer_4"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center"
-            android:padding="6dp">
+            android:gravity="center">
             <TextView
                 android:id="@+id/text_name_4"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#F0F8FF"
-                android:textSize="12sp"
+                android:textColor="#E6F1F9"
+                android:textSize="10sp"
                 android:text="المغرب" />
             <TextView
                 android:id="@+id/text_time_4"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#F0F8FF"
+                android:layout_marginTop="1dp"
+                android:includeFontPadding="false"
+                android:textColor="#E6F1F9"
                 android:textSize="12sp"
-                android:layout_marginTop="2dp"
+                android:textStyle="bold"
                 android:text="--:--" />
         </LinearLayout>
 
-        <!-- Prayer 5 -->
         <LinearLayout
-            android:id="@+id/row_prayer_5"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center"
-            android:padding="6dp">
+            android:gravity="center">
             <TextView
                 android:id="@+id/text_name_5"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#F0F8FF"
-                android:textSize="12sp"
+                android:textColor="#E6F1F9"
+                android:textSize="10sp"
                 android:text="العشاء" />
             <TextView
                 android:id="@+id/text_time_5"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#F0F8FF"
+                android:layout_marginTop="1dp"
+                android:includeFontPadding="false"
+                android:textColor="#E6F1F9"
                 android:textSize="12sp"
-                android:layout_marginTop="2dp"
+                android:textStyle="bold"
                 android:text="--:--" />
         </LinearLayout>
     </LinearLayout>
-
-    <!-- BOTTOM: Countdown Section -->
-    <Chronometer
-        android:id="@+id/widget_countdown"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="#4DB3E5"
-        android:textSize="26sp"
-        android:textStyle="bold"
-        android:countDown="true"
-        android:format="-%s" />
 
 </LinearLayout>

@@ -220,24 +220,31 @@ class _QiblaScreenState extends State<QiblaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Every state shares the same canvas, so entering the screen doesn't
+    // flash flat navy before the gradient and pattern appear. The font
+    // family is lowercase 'cairo' throughout — the capitalised spelling
+    // these states used doesn't match the family declared in pubspec.yaml,
+    // so they were silently falling back to the system font.
     if (_loading) {
       return Scaffold(
         backgroundColor: AppColors.surface,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(color: AppColors.body),
-              const SizedBox(height: 24),
-              const Text(
-                'جاري التحميل...',
-                style: TextStyle(
-                  color: AppColors.body,
-                  fontFamily: 'Cairo',
-                  fontSize: 16,
+        body: const AppBackground(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: AppColors.body),
+                SizedBox(height: 24),
+                Text(
+                  'جاري التحميل...',
+                  style: TextStyle(
+                    color: AppColors.body,
+                    fontFamily: 'cairo',
+                    fontSize: 16,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -246,25 +253,27 @@ class _QiblaScreenState extends State<QiblaScreen> {
     if (!_isCompassSupported) {
       return Scaffold(
         backgroundColor: AppColors.surface,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: AppColors.label, size: 64),
-              const SizedBox(height: 16),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 32),
-                child: Text(
-                  "جهازك لا يحتوي على مستشعر البوصلة",
-                  style: TextStyle(
-                    color: AppColors.body,
-                    fontSize: 16,
-                    fontFamily: 'Cairo',
+        body: const AppBackground(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, color: AppColors.label, size: 56),
+                SizedBox(height: 16),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    "جهازك لا يحتوي على مستشعر البوصلة",
+                    style: TextStyle(
+                      color: AppColors.body,
+                      fontSize: 16,
+                      fontFamily: 'cairo',
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -273,38 +282,35 @@ class _QiblaScreenState extends State<QiblaScreen> {
     if (!_hasPermission) {
       return Scaffold(
         backgroundColor: AppColors.surface,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.location_off, color: AppColors.label, size: 64),
-              const SizedBox(height: 16),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 32),
-                child: Text(
-                  "يجب السماح بإذن الموقع لاستخدام البوصلة",
-                  style: TextStyle(
-                    color: AppColors.body,
-                    fontSize: 16,
-                    fontFamily: 'Cairo',
+        body: AppBackground(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.location_off, color: AppColors.label, size: 56),
+                const SizedBox(height: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    "يجب السماح بإذن الموقع لاستخدام البوصلة",
+                    style: TextStyle(
+                      color: AppColors.body,
+                      fontSize: 16,
+                      fontFamily: 'cairo',
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: _checkPermission,
-                icon: const Icon(Icons.refresh),
-                label: const Text(
-                  'إعادة المحاولة',
-                  style: TextStyle(fontFamily: 'Cairo'),
+                const SizedBox(height: 24),
+                // Same button treatment as the recalibrate control, so the
+                // app has one button family rather than one per screen state.
+                _FilledAction(
+                  icon: Icons.refresh,
+                  label: 'إعادة المحاولة',
+                  onTap: _checkPermission,
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.cardFill,
-                  foregroundColor: AppColors.body,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -371,26 +377,32 @@ class _QiblaScreenState extends State<QiblaScreen> {
                   _lastHapticTime = now;
                 }
 
+                // Three groups, not seven stacked sections: the header, the
+                // task cluster (instruction → marker → dial, which move as
+                // one object), and the quiet footer. The instruction lives
+                // inside the cluster rather than above it, so the leftover
+                // space falls either side of the whole group instead of
+                // pooling underneath the dial.
                 return Column(
                   children: [
                     _buildHeader(),
-                    const SizedBox(height: 12),
-                    _buildStatusPill(isPointingToQibla, normalizedQiblah),
+                    // The dial is width-bound, so on a tall phone it can
+                    // never grow enough to fill the column — there will
+                    // always be slack. Expanded owns that slack (which also
+                    // keeps the cluster's FittedBox able to scale down on
+                    // short screens), and the cluster sits a little above
+                    // the midpoint of it: roughly 40% of the slack above,
+                    // 60% below. Dead-centre reads as floating and
+                    // top-pinned strands the footer.
                     Expanded(
-                      child: Center(
-                        child: _buildCompass(
-                          qiblahDirection,
-                          isPointingToQibla,
-                          normalizedQiblah,
-                        ),
+                      child: _buildTaskCluster(
+                        qiblahDirection,
+                        isPointingToQibla,
+                        normalizedQiblah,
                       ),
                     ),
-                    _buildInfoCards(currentDir),
-                    const SizedBox(height: 16),
-                    _buildBottomControls(),
-                    const SizedBox(height: 10),
-                    _buildCalibrationHint(),
-                    const SizedBox(height: 12),
+                    _buildFooter(displayQibla: normalizedQiblah),
+                    const SizedBox(height: 28),
                   ],
                 );
               },
@@ -401,23 +413,32 @@ class _QiblaScreenState extends State<QiblaScreen> {
     );
   }
 
+  // One composition rule, applied top and bottom: information sits on the
+  // reading-start side (right, in RTL), actions sit on the far side. That
+  // gives the page a consistent off-centre axis without the layout looking
+  // arbitrarily nudged — the compass stays the only centred thing.
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.fromLTRB(12, 4, 20, 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _RoundIconButton(
-            icon: Icons.help_outline,
-            onTap: _showHelpDialog,
+          // A plain icon target, not another bordered surface — a utility
+          // affordance shouldn't carry the same weight as a real button.
+          IconButton(
+            onPressed: _showHelpDialog,
+            icon: const Icon(Icons.help_outline, size: 20),
+            color: AppColors.faint,
+            splashRadius: 22,
+            tooltip: 'كيف تعمل البوصلة؟',
           ),
           const Text(
             'اتجاه القبلة',
             style: TextStyle(
               fontFamily: 'cairo',
               fontWeight: FontWeight.bold,
-              fontSize: 22,
-              color: AppColors.heading,
+              fontSize: 18,
+              color: AppColors.body,
             ),
           ),
         ],
@@ -474,82 +495,57 @@ class _QiblaScreenState extends State<QiblaScreen> {
     );
   }
 
-  Widget _buildStatusPill(bool isPointingToQibla, double normalizedQiblah) {
-    Widget pill;
-    if (isPointingToQibla) {
-      pill = Container(
-        key: const ValueKey('aligned'),
-        margin: const EdgeInsets.only(top: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.success.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle, color: AppColors.success, size: 18),
-            SizedBox(width: 8),
-            Text(
-              'أنت متجه نحو القبلة',
-              style: TextStyle(
-                fontFamily: 'cairo',
-                fontWeight: FontWeight.bold,
-                color: AppColors.success,
-              ),
-            ),
-          ],
-        ),
-      );
-    } else {
-      // Shortest-turn instruction: turn right if the bearing is in the
-      // near half of the circle, left otherwise — mirrors how the arc/
-      // marker already animate via the shortest-turn logic above.
-      final turnRight = normalizedQiblah <= 180;
-      final degrees = (turnRight ? normalizedQiblah : 360 - normalizedQiblah).round();
-      pill = Container(
-        key: const ValueKey('turn'),
-        margin: const EdgeInsets.only(top: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              turnRight ? Icons.rotate_right : Icons.rotate_left,
-              color: AppColors.accent,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              turnRight ? 'أدر يمينًا $degrees°' : 'أدر يسارًا $degrees°',
-              style: const TextStyle(
-                fontFamily: 'cairo',
-                fontWeight: FontWeight.bold,
-                color: AppColors.accent,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+  /// The one thing the user is here to read. Deliberately unadorned — no
+  /// pill, no border, no glow — because the surrounding surfaces were what
+  /// made it read as another badge instead of an instruction. Size and
+  /// colour alone carry it, so state is legible without decoration: white
+  /// while the user still has to move, the success token once they're
+  /// aligned.
+  Widget _buildInstruction(bool isPointingToQibla, double normalizedQiblah) {
+    // Shortest-turn instruction: turn right if the bearing is in the near
+    // half of the circle, left otherwise — mirrors how the arc/marker
+    // already animate via the shortest-turn logic above.
+    final turnRight = normalizedQiblah <= 180;
+    final degrees =
+        (turnRight ? normalizedQiblah : 360 - normalizedQiblah).round();
 
-    return AnimatedSwitcher(duration: const Duration(milliseconds: 250), child: pill);
+    return SizedBox(
+      // Fixed height: the instruction swaps text between states, and a
+      // self-sizing box would shunt the compass up and down as it does.
+      // Trimmed from 44 — that box reserved more room than the 24px text
+      // actually needed, which read as dead air between the instruction
+      // and the marker below it.
+      height: 32,
+      child: Center(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: Text(
+            isPointingToQibla
+                ? 'أنت متجه نحو القبلة'
+                : turnRight
+                ? 'أدر يمينًا $degrees°'
+                : 'أدر يسارًا $degrees°',
+            key: ValueKey(isPointingToQibla),
+            textDirection: TextDirection.rtl,
+            style: TextStyle(
+              fontFamily: 'cairo',
+              fontWeight: FontWeight.bold,
+              fontSize: 24,
+              height: 1.2,
+              color:
+                  isPointingToQibla ? AppColors.success : AppColors.heading,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
-  Widget _buildCompass(
+  Widget _buildTaskCluster(
     QiblahDirection qiblahDirection,
     bool isPointingToQibla,
     double normalizedQiblah,
   ) {
-    final double screenWidth = MediaQuery.sizeOf(context).width;
-    final double displayQibla = ((normalizedQiblah % 360) + 360) % 360;
-
     // Same shortest-turn value already driving the marker's own rotation,
     // read directly for the highlighted arc so the two can never drift out
     // of sync with each other.
@@ -557,315 +553,292 @@ class _QiblaScreenState extends State<QiblaScreen> {
     if (sweepDegrees > 180) sweepDegrees -= 360;
     if (sweepDegrees < -180) sweepDegrees += 360;
 
-    return SizedBox(
-      height: screenWidth + 75,
-      width: screenWidth - 32,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Rendered at the same fixed size assets/test.svg used to be
-          // (~360x360, unscaled to screen width) — ka3baInCompass.svg's own
-          // artwork is offset within an equally-sized canvas, which is what
-          // makes it orbit correctly when rotated; keeping this painter the
-          // same size keeps that orbit radius matching the ring exactly.
-          AnimatedRotation(
-            turns: _lastCompassTurns,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-            child: const CustomPaint(
-              size: Size(360, 360),
-              painter: CompassRingPainter(
-                fillColor: AppColors.dialFace,
-                ringColor: AppColors.archBottom,
-                tickColor: AppColors.onLightSecondary,
-                labelColor: AppColors.onLightSecondary,
-                cardinalColor: AppColors.onLight,
-              ),
-            ),
-          ),
-          CustomPaint(
-            size: const Size(360, 360),
-            painter: QiblaArcPainter(
-              sweepDegrees: sweepDegrees,
-              color: AppColors.accent,
-            ),
-          ),
-          AnimatedRotation(
-            turns: _lastQiblaTurns,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-            child: SvgPicture.asset("assets/ka3baInCompass.svg"),
-          ),
-          Align(
-            alignment: Alignment.topCenter,
-            child: SvgPicture.asset("assets/arrow.svg"),
-          ),
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  "${qiblahDirection.direction.toStringAsFixed(0)}°",
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontFamily: 'cairo',
-                    fontWeight: FontWeight.bold,
-                    // Identity's success/aligned token (DESIGN_IDENTITY.md
-                    // §1) — not Colors.green, which has no home in this
-                    // palette. This text sits on the light dial, so its
-                    // resting color is the on-light token, not the dark
-                    // surface color.
-                    color:
-                        isPointingToQibla
-                            ? AppColors.success
-                            : AppColors.onLight,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: FittedBox(
+        // Scales the marker down together with the dial on narrow or short
+        // screens. Anything that shrinks one and not the other would break
+        // the marker's orbit radius, which depends on the canvases matching.
+        fit: BoxFit.scaleDown,
+        // Biased above centre rather than dead-centre: the optical centre of
+        // a page sits a little high, and this keeps the gap under the dial
+        // from collapsing into the footer.
+        alignment: const Alignment(0, -0.28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildInstruction(isPointingToQibla, normalizedQiblah),
+            // Deliberate, not zero — touching (my previous pass) read as
+            // clutter, and the original ~60px gap read as unrelated
+            // widgets. This is the middle: close enough to group, distinct
+            // enough not to overlap.
+            const SizedBox(height: 18),
+            SvgPicture.asset("assets/arrow.svg"),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: 360,
+              // 366, not 360: ka3baInCompass.svg's canvas is 365 tall, and
+              // constraining it below its intrinsic height would rescale it
+              // out of alignment with the dial it orbits.
+              height: 366,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Painted at the same fixed size assets/test.svg used to
+                  // be, so the marker's orbit radius still matches the ring.
+                  AnimatedRotation(
+                    turns: _lastCompassTurns,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                    child: const CustomPaint(
+                      size: Size(360, 360),
+                      painter: CompassRingPainter(
+                        fillColor: AppColors.dialFace,
+                        ringColor: AppColors.archBottom,
+                        tickColor: AppColors.onLightSecondary,
+                        labelColor: AppColors.onLightSecondary,
+                        cardinalColor: AppColors.onLight,
+                      ),
+                    ),
                   ),
-                ),
-                const Text(
-                  'اتجاهك الحالي',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontFamily: 'cairo',
-                    color: AppColors.onLightSecondary,
+                  CustomPaint(
+                    size: const Size(360, 360),
+                    painter: QiblaArcPainter(
+                      sweepDegrees: sweepDegrees,
+                      color: AppColors.accent,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Container(width: 60, height: 1, color: AppColors.archBottom),
-                const SizedBox(height: 10),
-                Text(
-                  'القبلة ${displayQibla.round()}°',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontFamily: 'cairo',
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.onLight,
+                  AnimatedRotation(
+                    turns: _lastQiblaTurns,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                    child: SvgPicture.asset("assets/ka3baInCompass.svg"),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.onLight.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Row(
+                  // One number only. The dial reports where the user is
+                  // facing; the instruction above says what to do about it.
+                  // Stacking the Qibla bearing and a Kaaba chip in here too
+                  // just gave the eye three numbers to rank.
+                  Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: SvgPicture.asset("assets/ka3baInCompass.svg"),
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'القبلة',
+                      Text(
+                        "${qiblahDirection.direction.toStringAsFixed(0)}°",
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 34,
                           fontFamily: 'cairo',
                           fontWeight: FontWeight.bold,
-                          color: AppColors.onLight,
+                          // Identity's success/aligned token
+                          // (DESIGN_IDENTITY.md §1) — not Colors.green, which
+                          // has no home in this palette. This text sits on the
+                          // light dial, so its resting colour is the on-light
+                          // token, not the dark surface colour.
+                          color:
+                              isPointingToQibla
+                                  ? AppColors.success
+                                  : AppColors.onLight,
                         ),
                       ),
+                      const Text(
+                        'اتجاهك الحالي',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontFamily: 'cairo',
+                          color: AppColors.onLightSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The recalibrate action and the reference values, unified into one bar
+  /// instead of two elements floating independently. A single fill + a
+  /// divider does the grouping, rather than giving each its own surface —
+  /// still just one filled component on the whole screen, now assembled as
+  /// one piece instead of two. The fabricated "compass accuracy" card stays
+  /// gone: nothing in flutter_qiblah's `QiblahDirection` reports sensor
+  /// accuracy to back it up.
+  Widget _buildFooter({required double displayQibla}) {
+    final bearing = (((displayQibla % 360) + 360) % 360).round();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Material(
+        color: AppColors.barFill,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _recalibrate,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            // Two zones, evenly split: the button centres within its own
+            // half, the info column stays end-aligned within its half. A
+            // full-bar-relative centre (a version I tried in between) put
+            // the button off to one side, since the info group is narrower
+            // than the button's own zone — this way each element centres in
+            // the space that's actually its own.
+            child: Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.refresh,
+                        size: 18,
+                        color: AppColors.body,
+                      ),
+                      const SizedBox(width: 9),
+                      const Text(
+                        'إعادة ضبط القبلة',
+                        style: TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.body,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(
+                  height: 30,
+                  child: VerticalDivider(
+                    color: AppColors.cardBorder,
+                    width: 24,
+                    thickness: 1,
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'القبلة $bearing°',
+                        textDirection: TextDirection.rtl,
+                        style: const TextStyle(
+                          fontFamily: 'cairo',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                      // Dropped entirely rather than shown as a placeholder
+                      // dash — an empty slot advertises missing data the
+                      // user never asked for.
+                      if (_distanceToMeccaKm != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_formatKm(_distanceToMeccaKm!)} كم إلى مكة',
+                          textDirection: TextDirection.rtl,
+                          style: const TextStyle(
+                            fontFamily: 'cairo',
+                            fontSize: 12,
+                            color: AppColors.faint,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoCards(double currentDir) {
-    final distanceText =
-        _distanceToMeccaKm == null
-            ? '—'
-            : 'كم ${_distanceToMeccaKm!.round()}';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: _InfoCard(
-              icon: Icons.explore_outlined,
-              iconColor: AppColors.accent,
-              value: '${currentDir.toStringAsFixed(0)}°',
-              label: 'اتجاهك الحالي',
-            ),
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: _InfoCard(
-              icon: Icons.signal_cellular_alt,
-              iconColor: AppColors.success,
-              value: 'عالية',
-              label: 'دقة البوصلة',
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _InfoCard(
-              icon: Icons.near_me_outlined,
-              iconColor: AppColors.accent,
-              value: distanceText,
-              label: 'إلى مكة',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomControls() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          _RoundIconButton(
-            icon: Icons.compass_calibration_outlined,
-            onTap: () {},
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                setState(() {
-                  _loading = true;
-                });
-                await Future.delayed(const Duration(milliseconds: 600));
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text(
-                        'تم إعادة التهيئة بنجاح.',
-                        style: TextStyle(
-                          fontFamily: 'cairo',
-                          color: AppColors.body,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      duration: const Duration(seconds: 3),
-                      // Matches PrayerTimeScreen's snackbar treatment — same
-                      // component, same role, same look.
-                      backgroundColor: AppColors.sheetTop,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  );
-                }
-                _checkPermission();
-              },
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text(
-                'إعادة ضبط القبلة',
-                style: TextStyle(fontFamily: 'cairo', fontSize: 14),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.cardFill,
-                foregroundColor: AppColors.body,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(25),
-                  side: BorderSide(color: AppColors.cardBorder),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                elevation: 0,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCalibrationHint() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 32),
-      child: Text(
-        'حرّك هاتفك على شكل رقم ٨ لمعايرة البوصلة، وابعده عن المعادن.',
-        style: TextStyle(fontFamily: 'cairo', fontSize: 12, color: AppColors.faint),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-}
-
-class _RoundIconButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _RoundIconButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.cardFill,
-      shape: const CircleBorder(side: BorderSide(color: AppColors.cardBorder)),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(icon, color: AppColors.body, size: 20),
         ),
       ),
     );
   }
+
+  static String _formatKm(double km) {
+    final digits = km.round().toString();
+    // Western digits with a thousands separator, matching how every other
+    // number in the app renders regardless of device locale.
+    return digits.replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+$)'),
+      (m) => '${m[1]},',
+    );
+  }
+
+  Future<void> _recalibrate() async {
+    setState(() {
+      _loading = true;
+    });
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'تم إعادة التهيئة بنجاح.',
+            style: TextStyle(fontFamily: 'cairo', color: AppColors.body),
+            textAlign: TextAlign.center,
+          ),
+          duration: const Duration(seconds: 3),
+          // Matches PrayerTimeScreen's snackbar treatment — same component,
+          // same role, same look.
+          backgroundColor: AppColors.sheetTop,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    }
+    _checkPermission();
+  }
 }
 
-class _InfoCard extends StatelessWidget {
+/// The screen's one button family. It's the only element here that carries a
+/// fill, which is what lets it read as "you can press this" without a border,
+/// glow or blur doing the work — and its 12px radius keeps it distinct from
+/// the pill shapes the app reserves for status and selection.
+class _FilledAction extends StatelessWidget {
   final IconData icon;
-  final Color iconColor;
-  final String value;
   final String label;
+  final VoidCallback onTap;
 
-  const _InfoCard({
+  const _FilledAction({
     required this.icon,
-    required this.iconColor,
-    required this.value,
     required this.label,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppColors.cardFill,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: iconColor, size: 20),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontFamily: 'cairo',
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              color: AppColors.heading,
-            ),
+    return Material(
+      color: AppColors.barFill,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: AppColors.body),
+              const SizedBox(width: 9),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontFamily: 'cairo',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.body,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'cairo',
-              fontSize: 11,
-              color: AppColors.faint,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+        ),
       ),
     );
   }
