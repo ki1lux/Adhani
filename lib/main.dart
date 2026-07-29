@@ -259,16 +259,20 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               gradient:
                   isSelected
                       ? const LinearGradient(
-                        colors: [AppColors.accent, AppColors.accentDeep],
+                        colors: [
+                          AppColors.archTop,
+                          AppColors.archMid,
+                          AppColors.archBottom,
+                        ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       )
                       : null,
               boxShadow:
                   isSelected
-                      ? const [
+                      ? [
                         BoxShadow(
-                          color: AppColors.accentBorder,
+                          color: AppColors.archTop.withValues(alpha: 0.45),
                           blurRadius: 18,
                           spreadRadius: 1,
                         ),

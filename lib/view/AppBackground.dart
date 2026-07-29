@@ -17,8 +17,7 @@ class AppBackground extends StatelessWidget {
   const AppBackground({super.key, required this.child});
 
   // Top of the radial glow → mid navy (the base surface) → bottom fade.
-  static const _glowTop = Color(0xFF12405C);
-  static const _glowTopSoft = Color(0xFF154762);
+  static const _glowTopSoft = Color(0xFF0F3348);
   static const _midNavy = Color(0xFF0A2740);
   static const _bottomFade = Color(0xFF061726);
   static const _bottomDeep = Color(0xFF05131F);
@@ -65,8 +64,14 @@ class AppBackground extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: RadialGradient(
                 center: Alignment(0.0, -0.85),
-                radius: 1.1,
-                colors: [_glowTop, Color(0x0012405C)],
+                radius: 0.65,
+                // Kept in lockstep with _glowTopSoft (same base hue, same
+                // darkening) rather than tuned per-screen — screens without
+                // a light card covering the very top (PrayerTimeScreen,
+                // Qibla) expose this hotspot directly, so darkening the one
+                // shared color keeps every screen consistent instead of
+                // forking the background per-screen.
+                colors: [Color(0xB30F3348), Color(0x000F3348)],
                 stops: [0.0, 1.0],
               ),
             ),

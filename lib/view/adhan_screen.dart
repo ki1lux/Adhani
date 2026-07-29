@@ -101,14 +101,14 @@ class _adhanScreen extends ConsumerState<AdhanScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      SizedBox(height: statusBarHeight + 8),
+                      SizedBox(height: statusBarHeight + 24),
                       Analogclockview(
                         size: clockSize,
                         onTick: (time) {
                           if (mounted) setState(() => _now = time);
                         },
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
