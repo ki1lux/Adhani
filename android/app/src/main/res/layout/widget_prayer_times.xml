@@ -7,10 +7,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:gravity="center_vertical"
     android:background="@drawable/widget_background"
     android:padding="10dp">
 
-    <!-- Header: the prayer/countdown block, with the progress ring at the end -->
+    <!-- Header: the prayer/countdown block, with the progress ring at the end.
+         Sizes to its content; the root's center_vertical gravity spreads any
+         leftover height evenly above and below the whole stack, rather than
+         pooling it in one gap. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -34,18 +38,18 @@
                 android:gravity="center_vertical">
                 <ImageView
                     android:id="@+id/widget_prayer_icon"
-                    android:layout_width="15dp"
-                    android:layout_height="15dp"
-                    android:layout_marginEnd="6dp"
+                    android:layout_width="17dp"
+                    android:layout_height="17dp"
+                    android:layout_marginEnd="7dp"
                     android:src="@drawable/ic_widget_moon"
                     android:tint="#A9C3D6" />
                 <TextView
                     android:id="@+id/widget_next_prayer_name"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:fontFamily="@font/cairo_bold"
                     android:textColor="#FFFFFF"
-                    android:textSize="17sp"
-                    android:textStyle="bold"
+                    android:textSize="19sp"
                     android:text="جارٍ التحميل" />
                 <TextView
                     android:id="@+id/widget_next_prayer_time"
@@ -53,9 +57,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
                     android:includeFontPadding="false"
+                    android:fontFamily="@font/cairo_bold"
                     android:textColor="#A9C3D6"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
+                    android:textSize="14sp"
                     android:text="--:--" />
             </LinearLayout>
 
@@ -72,17 +76,18 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:includeFontPadding="false"
+                    android:fontFamily="@font/cairo_bold"
                     android:textColor="#FFFFFF"
-                    android:textSize="22sp"
-                    android:textStyle="bold"
+                    android:textSize="24sp"
                     android:countDown="true"
                     android:format="%s" />
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
+                    android:fontFamily="@font/cairo_regular"
                     android:textColor="#A9C3D6"
-                    android:textSize="11sp"
+                    android:textSize="12sp"
                     android:text="متبقّية للأذان" />
             </LinearLayout>
 
@@ -91,14 +96,15 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
+                android:fontFamily="@font/cairo_regular"
                 android:textColor="#7D97AD"
-                android:textSize="10sp"
+                android:textSize="11sp"
                 android:text="" />
         </LinearLayout>
 
         <FrameLayout
-            android:layout_width="56dp"
-            android:layout_height="56dp">
+            android:layout_width="70dp"
+            android:layout_height="70dp">
             <ImageView
                 android:id="@+id/widget_progress_ring"
                 android:layout_width="match_parent"
@@ -118,25 +124,26 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                        android:fontFamily="@font/cairo_bold"
                         android:textColor="#FFFFFF"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
+                        android:textSize="20sp"
                         android:text="--" />
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
+                        android:fontFamily="@font/cairo_bold"
                         android:textColor="#FFFFFF"
-                        android:textSize="9sp"
-                        android:textStyle="bold"
+                        android:textSize="11sp"
                         android:text="%" />
                 </LinearLayout>
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="1dp"
+                    android:fontFamily="@font/cairo_regular"
                     android:textColor="#7D97AD"
-                    android:textSize="7sp"
+                    android:textSize="8sp"
                     android:text="من الفترة" />
             </LinearLayout>
         </FrameLayout>
@@ -149,7 +156,7 @@
         android:id="@+id/widget_progress_line"
         android:layout_width="match_parent"
         android:layout_height="11dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="14dp"
         android:scaleType="fitXY" />
 
     <!-- Today's five prayers. layoutDirection=rtl mirrors the declaration
@@ -160,7 +167,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="8dp"
         android:orientation="horizontal"
         android:layoutDirection="rtl"
         android:weightSum="5">
@@ -175,6 +182,7 @@
                 android:id="@+id/text_name_1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:fontFamily="@font/cairo_regular"
                 android:textColor="#E6F1F9"
                 android:textSize="10sp"
                 android:text="الفجر" />
@@ -184,9 +192,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="1dp"
                 android:includeFontPadding="false"
+                android:fontFamily="@font/cairo_bold"
                 android:textColor="#E6F1F9"
                 android:textSize="12sp"
-                android:textStyle="bold"
                 android:text="--:--" />
         </LinearLayout>
 
@@ -200,6 +208,7 @@
                 android:id="@+id/text_name_2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:fontFamily="@font/cairo_regular"
                 android:textColor="#E6F1F9"
                 android:textSize="10sp"
                 android:text="الظهر" />
@@ -209,9 +218,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="1dp"
                 android:includeFontPadding="false"
+                android:fontFamily="@font/cairo_bold"
                 android:textColor="#E6F1F9"
                 android:textSize="12sp"
-                android:textStyle="bold"
                 android:text="--:--" />
         </LinearLayout>
 
@@ -225,6 +234,7 @@
                 android:id="@+id/text_name_3"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:fontFamily="@font/cairo_regular"
                 android:textColor="#E6F1F9"
                 android:textSize="10sp"
                 android:text="العصر" />
@@ -234,9 +244,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="1dp"
                 android:includeFontPadding="false"
+                android:fontFamily="@font/cairo_bold"
                 android:textColor="#E6F1F9"
                 android:textSize="12sp"
-                android:textStyle="bold"
                 android:text="--:--" />
         </LinearLayout>
 
@@ -250,6 +260,7 @@
                 android:id="@+id/text_name_4"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:fontFamily="@font/cairo_regular"
                 android:textColor="#E6F1F9"
                 android:textSize="10sp"
                 android:text="المغرب" />
@@ -259,9 +270,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="1dp"
                 android:includeFontPadding="false"
+                android:fontFamily="@font/cairo_bold"
                 android:textColor="#E6F1F9"
                 android:textSize="12sp"
-                android:textStyle="bold"
                 android:text="--:--" />
         </LinearLayout>
 
@@ -275,6 +286,7 @@
                 android:id="@+id/text_name_5"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:fontFamily="@font/cairo_regular"
                 android:textColor="#E6F1F9"
                 android:textSize="10sp"
                 android:text="العشاء" />
@@ -284,9 +296,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="1dp"
                 android:includeFontPadding="false"
+                android:fontFamily="@font/cairo_bold"
                 android:textColor="#E6F1F9"
                 android:textSize="12sp"
-                android:textStyle="bold"
                 android:text="--:--" />
         </LinearLayout>
     </LinearLayout>

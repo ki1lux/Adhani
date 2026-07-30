@@ -61,6 +61,13 @@ class PrayerWidgetProvider : AppWidgetProvider() {
         private const val COLOR_ACCENT = "#7AD2F7"
         private const val COLOR_BODY = "#E6F1F9"
         private const val COLOR_MUTED = "#A9C3D6"
+        /// The ring's unfilled arc reads as a recess, so it's darker than the
+        /// card rather than a lighter tint — translucent black over the navy
+        /// gradient, which keeps working as that gradient shifts down the card.
+        private const val COLOR_RING_TRACK = "#45000000"
+
+        /// The timeline's unspent portion is a rail rather than a recess, so
+        /// it stays a light tint.
         private const val COLOR_TRACK = "#33FFFFFF"
         // body at ~40% — passed prayers recede without disappearing.
         private const val COLOR_PASSED = "#66E6F1F9"
@@ -104,8 +111,8 @@ class PrayerWidgetProvider : AppWidgetProvider() {
             val density = context.resources.displayMetrics.density
             // Must match the FrameLayout's dp size in the layout, or the
             // bitmap gets rescaled and the stroke goes soft.
-            val sizePx = (56 * density).toInt()
-            val strokeWidthPx = 5.5f * density
+            val sizePx = (70 * density).toInt()
+            val strokeWidthPx = 7 * density
             val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             val inset = strokeWidthPx / 2
@@ -118,7 +125,7 @@ class PrayerWidgetProvider : AppWidgetProvider() {
                 style = Paint.Style.STROKE
                 strokeWidth = strokeWidthPx
                 strokeCap = Paint.Cap.ROUND
-                color = Color.parseColor(COLOR_TRACK)
+                color = Color.parseColor(COLOR_RING_TRACK)
             }
             canvas.drawOval(rect, trackPaint)
 
@@ -220,6 +227,12 @@ class PrayerWidgetProvider : AppWidgetProvider() {
             var nextPrayerTime = ""
 
             val computedTriggers = LongArray(6)
+            // Recorded here, where today's parsed time is still known, rather
+            // than re-derived later from the rolled-forward trigger. Guessing
+            // after the fact ("is it more than 12h away?") misreads Fajr for
+            // most of the evening — by 18:00 tomorrow's Fajr is under 12h out,
+            // so it looked like it hadn't happened yet today.
+            val passedToday = BooleanArray(6)
 
             // 1. Read all 5 prayers, populate text, and find the NEXT prayer
             for (i in 1..5) {
@@ -228,7 +241,10 @@ class PrayerWidgetProvider : AppWidgetProvider() {
 
                 // Parse the time string directly instead of relying on the alarm trigger_millis
                 // because the alarm trigger_millis might not be updated if the user disabled the Adhan for this prayer.
-                var actualTriggerMillis = todayMillisFor(time) ?: 0L
+                val todayMillis = todayMillisFor(time)
+                passedToday[i] = todayMillis != null && todayMillis <= now
+
+                var actualTriggerMillis = todayMillis ?: 0L
                 if (actualTriggerMillis != 0L && actualTriggerMillis <= now) {
                     actualTriggerMillis += 24 * 60 * 60 * 1000L
                 }
@@ -259,20 +275,11 @@ class PrayerWidgetProvider : AppWidgetProvider() {
             for (i in 1..5) {
                 val nameResId = context.resources.getIdentifier("text_name_$i", "id", context.packageName)
                 val timeResId = context.resources.getIdentifier("text_time_$i", "id", context.packageName)
-                val triggerMillis = computedTriggers[i]
-                if (nameResId == 0 || timeResId == 0 || triggerMillis == 0L) continue
-
-                // Anything pushed to tomorrow by the parsing above already
-                // happened today; compare against that original time.
-                val timeToday = if (triggerMillis > now + 12 * 60 * 60 * 1000L) {
-                    triggerMillis - 24 * 60 * 60 * 1000L
-                } else {
-                    triggerMillis
-                }
+                if (nameResId == 0 || timeResId == 0 || computedTriggers[i] == 0L) continue
 
                 val color = when {
                     i == nextPrayerId -> COLOR_ACCENT
-                    timeToday <= now -> COLOR_PASSED
+                    passedToday[i] -> COLOR_PASSED
                     else -> COLOR_BODY
                 }
                 views.setTextColor(nameResId, Color.parseColor(color))
