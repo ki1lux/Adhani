@@ -18,11 +18,21 @@ Native Android (Kotlin) changes under `android/`: build/verify with Gradle from
 the `android/` directory, e.g. `./gradlew :app:compileDebugKotlin` or
 `./gradlew assembleDebug`. Requires a JDK on `PATH`.
 
-There is no CI config in this repo (no `.github/workflows`), and
-`analysis_options.yaml` has the `include: package:flutter_lints/flutter.yaml`
-line commented out, so `flutter analyze` runs without the standard Flutter
-lint set actually enabled — don't assume lint failures will surface issues
-that `flutter_lints` would normally catch.
+There is no CI config in this repo (no `.github/workflows`).
+`analysis_options.yaml` **does** enable `package:flutter_lints/flutter.yaml`,
+and additionally promotes `avoid_print` and `use_build_context_synchronously`
+to errors — the codebase is clean against that set, so a new analyzer finding
+is a real regression, not pre-existing noise.
+
+Release builds are signed from `android/key.properties` (gitignored; see
+`android/key.properties.example`). Without that file the release build still
+succeeds but is signed with the debug key and prints a warning — such an
+artifact cannot be uploaded to Play.
+
+Debug logging: use `logDebug`/`logWarning` from `lib/services/app_logger.dart`
+on the Dart side (`logDebug` compiles out of release builds); on the Kotlin
+side `Log.d/v/i` are stripped from release by an `-assumenosideeffects` rule in
+`proguard-rules.pro`, so use `Log.w`/`Log.e` for anything that must survive.
 
 **Test on a physical Android device when touching native background
 behavior** (alarms, the countdown notification, boot recovery, the home
@@ -36,7 +46,7 @@ deep, independent native Android (Kotlin) backend. The Kotlin side keeps
 prayer alarms, a live countdown notification, and a home screen widget
 running correctly even when the Flutter engine/Dart isolate is not running
 (app killed, device rebooted) — most of the actual "hard" logic lives in
-`android/app/src/main/kotlin/com/example/myadhan/`, not in `lib/`.
+`android/app/src/main/kotlin/com/ki1lux/adhani/`, not in `lib/`.
 
 ### The shared-storage contract (the crux of the whole system)
 

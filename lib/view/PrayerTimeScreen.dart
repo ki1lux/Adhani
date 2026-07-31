@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
+import 'package:myadhan/services/app_config.dart';
+import 'package:myadhan/services/app_logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,9 +14,29 @@ import 'package:myadhan/prayer_alarm_scheduler.dart';
 import 'package:myadhan/providers/prayer_times_provider.dart';
 import 'package:myadhan/theme/app_colors.dart';
 import 'package:myadhan/view/AppBackground.dart';
+import 'package:myadhan/view/AppErrorView.dart';
+import 'package:myadhan/view/AppShimmer.dart';
+import 'package:myadhan/view/AppToast.dart';
 import 'package:myadhan/view/AccentCard.dart';
 import 'package:myadhan/view/CountDown.dart';
+import 'package:myadhan/view/OfflineBanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// The same asymmetric shape on every prayer row (not just the next one) —
+/// "only some corners rounded, and by a lot," echoing the Home screen's clock
+/// card and NextPrayerCard. The next row is still distinguished by its accent
+/// edge + glow + color, not by having a different silhouette from its
+/// siblings.
+///
+/// File-level rather than private to `_AnimatedPrayerCardState` so the
+/// loading skeleton can draw placeholders in the exact shape of the rows they
+/// stand in for — one definition, so the two can't drift apart.
+const _rowRadius = BorderRadius.only(
+  topLeft: Radius.circular(24),
+  topRight: Radius.circular(12),
+  bottomLeft: Radius.circular(12),
+  bottomRight: Radius.circular(24),
+);
 
 /// Shared scale+fade entrance used by both dialogs on this screen — was
 /// previously duplicated verbatim in each `showGeneralDialog` call.
@@ -183,6 +204,8 @@ class PrayerTimeScreen extends ConsumerStatefulWidget {
 }
 
 class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
+  static const _nativeChannel = MethodChannel('com.myadhan/notification');
+
   String _countryText = 'الموقع...';
   String _cityText = '';
 
@@ -191,6 +214,22 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
     super.initState();
     _loadSavedLocation();
   }
+
+  /// Nominatim's usage policy asks every client for a User-Agent that
+  /// identifies the application *and* carries a contact address, so they can
+  /// reach someone before blocking a misbehaving client. The two call sites
+  /// here sent two different strings ('Adhani-App/1.0' and 'AdhanUK-App/1.0'),
+  /// neither with a contact.
+  static const _nominatimHeaders = {
+    'User-Agent': 'Adhani/${AppConfig.version} (${AppConfig.supportEmail})',
+  };
+
+  /// How long any of the name-lookup services get before we stop waiting.
+  ///
+  /// None of these calls had a timeout. On a device with Wi-Fi associated but
+  /// no route they hang until the OS gives up, which is long enough that the
+  /// user assumes the app is broken.
+  static const _geocodeTimeout = Duration(seconds: 8);
 
   Future<void> _loadLocation() async {
     try {
@@ -201,53 +240,82 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
       await prefs.setDouble('last_latitude', position.latitude);
       await prefs.setDouble('last_longitude', position.longitude);
 
-      // Get Arabic location names via Nominatim reverse geocoding
-      try {
-        final geoUri = Uri.parse(
-          'https://nominatim.openstreetmap.org/reverse?lat=${position.latitude}&lon=${position.longitude}&format=json&addressdetails=1&accept-language=ar',
-        );
-        final geoResponse = await http.get(
-          geoUri,
-          headers: {'User-Agent': 'Adhani-App/1.0'},
-        );
-        if (geoResponse.statusCode == 200) {
-          final geoData = json.decode(geoResponse.body);
-          final address = geoData['address'] as Map<String, dynamic>?;
-          if (address != null) {
-            String country = address['country'] as String? ?? '';
-            String city =
-                address['city'] as String? ??
-                address['town'] as String? ??
-                address['village'] as String? ??
-                address['state'] as String? ??
-                '';
-
-            await prefs.setString('country_name', country);
-            await prefs.setString('city_name', city);
-            _updateLocation(country, city);
-          }
-        }
-      } catch (e) {
-        // Fallback to geocoding package if Nominatim fails
-        final placemarks = await placemarkFromCoordinates(
-          position.latitude,
-          position.longitude,
-        );
-        if (placemarks.isNotEmpty) {
-          String country = placemarks[0].country ?? '';
-          String city = placemarks[0].locality ?? '';
-          await prefs.setString('country_name', country);
-          await prefs.setString('city_name', city);
-          _updateLocation(country, city);
-        }
-      }
+      // Naming the place is a nicety; having the times is the point. So the
+      // lookup gets its own try/catch and the fetch below runs either way —
+      // previously a failed reverse geocode threw past the fetch entirely, so
+      // an offline first run never even asked for prayer times.
+      await _resolvePlaceName(prefs, position.latitude, position.longitude);
 
       // Refresh prayer times with GPS coordinates
       ref
           .read(prayerTimesProvider.notifier)
           .fetchPrayerTimes(lat: position.latitude, lng: position.longitude);
     } catch (e) {
-      print("Error: $e");
+      logDebug("Error: $e");
+    }
+  }
+
+  /// Best-effort city/country name for the header. Never throws: the caller's
+  /// job (fetching prayer times) does not depend on it succeeding.
+  Future<void> _resolvePlaceName(
+    SharedPreferences prefs,
+    double latitude,
+    double longitude,
+  ) async {
+    // Get Arabic location names via Nominatim reverse geocoding
+    try {
+      final geoUri = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?lat=$latitude&lon=$longitude&format=json&addressdetails=1&accept-language=ar',
+      );
+      final geoResponse = await http
+          .get(geoUri, headers: _nominatimHeaders)
+          .timeout(_geocodeTimeout);
+      if (geoResponse.statusCode == 200) {
+        final geoData = json.decode(geoResponse.body);
+        final address = geoData['address'] as Map<String, dynamic>?;
+        if (address != null) {
+          String country = address['country'] as String? ?? '';
+          String city =
+              address['city'] as String? ??
+              address['town'] as String? ??
+              address['village'] as String? ??
+              address['state'] as String? ??
+              '';
+
+          await prefs.setString('country_name', country);
+          await prefs.setString('city_name', city);
+          _updateLocation(country, city);
+          return;
+        }
+      }
+    } catch (e) {
+      logDebug('⚠️ Nominatim reverse geocode failed: $e');
+    }
+
+    // Fallback to geocoding package if Nominatim fails. Note this is also
+    // network-backed on Android, so offline it fails too — hence the final
+    // fallback to whatever name we stored last time.
+    try {
+      final placemarks = await placemarkFromCoordinates(
+        latitude,
+        longitude,
+      ).timeout(_geocodeTimeout);
+      if (placemarks.isNotEmpty) {
+        String country = placemarks[0].country ?? '';
+        String city = placemarks[0].locality ?? '';
+        await prefs.setString('country_name', country);
+        await prefs.setString('city_name', city);
+        _updateLocation(country, city);
+        return;
+      }
+    } catch (e) {
+      logDebug('⚠️ Platform geocoder failed: $e');
+    }
+
+    // Keep the last known name rather than leaving the header on 'الموقع...'
+    final savedCountry = prefs.getString('country_name');
+    if (savedCountry != null) {
+      _updateLocation(savedCountry, prefs.getString('city_name') ?? '');
     }
   }
 
@@ -309,6 +377,13 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
 
     return Scaffold(
       body: prayerTimesAsync.when(
+        // A refresh that's happening over times we already have must not blank
+        // them out — offline, that refresh is going to fail, and the user would
+        // watch correct times turn into a skeleton and then an error screen.
+        // The provider keeps the previous value on the loading state so this
+        // hands it straight back to `data`.
+        skipLoadingOnRefresh: true,
+        skipLoadingOnReload: true,
         loading: () => _buildLoadingState(),
         error: (error, _) => _buildErrorState(error),
         data: (data) => _buildSuccessState(data),
@@ -316,65 +391,132 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
     );
   }
 
+  /// A skeleton of the real list rather than a centred spinner.
+  ///
+  /// This wait isn't instant — the provider starts in `loading` and has to
+  /// resolve GPS, reverse-geocode it and hit the Aladhan API before any row
+  /// exists — so showing the shape of what's coming beats a spinner that
+  /// says nothing about it. Metrics deliberately mirror `_buildSuccessState`
+  /// (same top spacing, same 16/20 gaps, same row height, same `_rowRadius`,
+  /// same 12/16 margins) so nothing jumps when the real content swaps in.
   Widget _buildLoadingState() {
-    return Container(
-      color: AppColors.surface,
-      child: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: AppColors.body),
-            SizedBox(height: 24),
-            Text(
-              'جاري التحميل...',
-              style: TextStyle(
-                color: AppColors.body,
-                fontFamily: 'cairo',
-                fontSize: 16,
-              ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: AppColors.surface,
+        // The old loading state painted a flat navy Container, so entering
+        // this tab flashed a solid colour before the gradient and pattern
+        // appeared behind the loaded list.
+        body: AppBackground(
+          child: SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final topSpacing = (constraints.maxHeight * 0.04).clamp(
+                  16.0,
+                  36.0,
+                );
+                return AppShimmer(
+                  child: Column(
+                    children: [
+                      SizedBox(height: topSpacing),
+                      // Mirrors _buildLocationHeader's own structure — same
+                      // 20 outer / 4x8 inner padding, same RTL direction, so
+                      // the pin lands on the right and the city/country
+                      // column starts exactly where the real text does.
+                      // (It used to be a centred Row, which is why the
+                      // placeholders jumped sideways on load.)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Directionality(
+                          textDirection: TextDirection.rtl,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                // The 32px location pin.
+                                const ShimmerBox(
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: BorderRadius.all(
+                                    Radius.circular(10),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // City — 28sp bold.
+                                        ShimmerBox(width: 140, height: 26),
+                                        SizedBox(width: 8),
+                                        // The 17px edit affordance.
+                                        ShimmerBox(
+                                          width: 17,
+                                          height: 17,
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(5),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 6),
+                                    // Country — 16sp.
+                                    ShimmerBox(width: 96, height: 15),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDivider(),
+                      const SizedBox(height: 20),
+                      ...List.generate(
+                        5,
+                        // 80, not 72: the row's 48px mute-icon touch target
+                        // plus its 16px vertical padding top and bottom is
+                        // what actually sets the height.
+                        (_) => const Padding(
+                          padding: EdgeInsets.only(
+                            bottom: 16,
+                            right: 12,
+                            left: 12,
+                          ),
+                          child: ShimmerBox(
+                            height: 80,
+                            borderRadius: _rowRadius,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildErrorState(Object error) {
-    // Not changed automatically per the audit's #10 — see the recommendation
-    // in the accompanying explanation for whether an error state should use
-    // red at all, given DESIGN_IDENTITY.md reserves it for the Qibla marker.
-    return Container(
-      color: AppColors.surface,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'حدث خطأ',
-              style: TextStyle(
-                color: AppColors.danger,
-                fontFamily: 'cairo',
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '$error',
-              style: const TextStyle(
-                color: AppColors.danger,
-                fontFamily: 'cairo',
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            _dialogPrimaryButton(
-              label: 'إعادة المحاولة',
-              onTap: () => ref.read(prayerTimesProvider.notifier).refresh(),
-            ),
-          ],
-        ),
-      ),
+    // Was `Text('$error')` — the raw exception object, so a failed request
+    // surfaced to the user as "Exception: API request failed: 500".
+    // AppErrorView classifies it and says something actionable instead.
+    return AppErrorView(
+      error: error,
+      onRetry: () => ref.read(prayerTimesProvider.notifier).refresh(),
     );
   }
 
@@ -409,6 +551,9 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                       children: [
                         SizedBox(height: topSpacing),
                         _buildLocationHeader(),
+                        // Says these times came from the cache, without
+                        // hiding them. Collapses to nothing when we're synced.
+                        const OfflineBanner(),
                         const SizedBox(height: 16),
                         _buildDivider(),
                         const SizedBox(height: 20),
@@ -637,12 +782,9 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                       final uri = Uri.parse(
                                         'https://nominatim.openstreetmap.org/search?q=$value&format=json&limit=5&addressdetails=1&accept-language=ar',
                                       );
-                                      final response = await http.get(
-                                        uri,
-                                        headers: {
-                                          'User-Agent': 'AdhanUK-App/1.0',
-                                        },
-                                      );
+                                      final response = await http
+                                          .get(uri, headers: _nominatimHeaders)
+                                          .timeout(_geocodeTimeout);
                                       if (!context.mounted) return;
                                       if (response.statusCode == 200) {
                                         final List<dynamic> data = json.decode(
@@ -693,12 +835,23 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                           isSearching = false;
                                         });
                                       }
-                                    } catch (_) {
+                                    } catch (e) {
                                       if (!context.mounted) return;
                                       setDialogState(() {
                                         suggestions = [];
                                         isSearching = false;
                                       });
+                                      // An empty list used to be the only
+                                      // signal here, so "we can't reach the
+                                      // search service" looked exactly like
+                                      // "no city by that name" — and the user
+                                      // retyped their own city over and over.
+                                      AppToast.error(
+                                        context,
+                                        'تعذّر البحث عن المدينة',
+                                        detail: 'تحقّق من اتصالك بالشبكة ثم أعد المحاولة',
+                                      );
+                                      debugPrint('City search failed: $e');
                                     }
                                   },
                                 );
@@ -822,6 +975,9 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
           ),
     ).then((_) {
       debounceTimer?.cancel();
+      // A TextEditingController holds a listener list and a change
+      // notification chain; one leaked per visit to this dialog.
+      cityController.dispose();
     });
   }
 
@@ -832,8 +988,10 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
     });
 
     try {
-      // Search for city coordinates using geocoding
-      final locations = await locationFromAddress(cityName);
+      // Search for city coordinates using geocoding. On Android this is the
+      // platform Geocoder, which is network-backed — hence the timeout.
+      final locations =
+          await locationFromAddress(cityName).timeout(_geocodeTimeout);
       if (locations.isNotEmpty) {
         final location = locations.first;
 
@@ -843,18 +1001,24 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
         await prefs.setDouble('last_longitude', location.longitude);
         await prefs.setString('manual_city', cityName);
 
-        // Get place name
-        final placemarks = await placemarkFromCoordinates(
-          location.latitude,
-          location.longitude,
-        );
+        // Naming it is optional; having its coordinates is not. A failed
+        // placemark lookup must not stop the prayer-time fetch below.
+        try {
+          final placemarks = await placemarkFromCoordinates(
+            location.latitude,
+            location.longitude,
+          ).timeout(_geocodeTimeout);
 
-        if (placemarks.isNotEmpty) {
-          _updateLocation(
-            placemarks[0].country ?? cityName,
-            placemarks[0].locality ?? '',
-          );
-        } else {
+          if (placemarks.isNotEmpty) {
+            _updateLocation(
+              placemarks[0].country ?? cityName,
+              placemarks[0].locality ?? '',
+            );
+          } else {
+            _updateLocation(cityName, '');
+          }
+        } catch (e) {
+          debugPrint('Placemark lookup failed, using typed name: $e');
           _updateLocation(cityName, '');
         }
 
@@ -863,11 +1027,39 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
             .read(prayerTimesProvider.notifier)
             .fetchPrayerTimes(lat: location.latitude, lng: location.longitude);
       } else {
-        _updateLocation('لم يتم العثور', cityName);
+        _restoreLocationLabel();
+        if (mounted) {
+          AppToast.error(
+            context,
+            'لم يتم العثور على «$cityName»',
+            detail: 'تأكّد من اسم المدينة ثم أعد المحاولة',
+          );
+        }
       }
     } catch (e) {
-      _updateLocation('خطأ في البحث', cityName);
+      // The failure used to be written into the country slot, so the header
+      // read "خطأ في البحث" as though that were a place — permanently, with no
+      // way to retry. Say it in a toast and put the real label back.
+      debugPrint('City lookup failed: $e');
+      _restoreLocationLabel();
+      if (mounted) {
+        AppToast.error(
+          context,
+          'تعذّر البحث عن المدينة',
+          detail: 'تحقّق من اتصالك بالشبكة ثم أعد المحاولة',
+        );
+      }
     }
+  }
+
+  /// Puts the header back to the last place we actually knew about, after a
+  /// search that went nowhere.
+  Future<void> _restoreLocationLabel() async {
+    final prefs = await SharedPreferences.getInstance();
+    _updateLocation(
+      prefs.getString('country_name') ?? 'الموقع...',
+      prefs.getString('city_name') ?? '',
+    );
   }
 
   Widget _buildPrayerCard(
@@ -905,13 +1097,21 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
     return prefs.getBool('adhan_enabled_$prayerName') ?? true;
   }
 
-  void _showSoundDialog(String prayerName) async {
+  Future<void> _showSoundDialog(String prayerName) async {
     final prefs = await SharedPreferences.getInstance();
+    // The dialog is opened after an await, so the screen may already be gone
+    // (the user switched tabs, or the app was backgrounded and torn down).
+    if (!mounted) return;
     bool isEnabled = prefs.getBool('adhan_enabled_$prayerName') ?? true;
     String selectedSound =
         prefs.getString('adhan_sound_$prayerName') ?? 'adhan1';
 
-    final audioPlayer = AudioPlayer();
+    // Preview through the native AdhanPlayer rather than `audioplayers`.
+    // That is the same code path the alarm itself uses (ALARM stream, same
+    // audio-focus rules), so what the user hears here is what they'll hear at
+    // prayer time — and it lets the app stop shipping a second ~7 MB copy of
+    // all three recordings as Flutter assets. See MainActivity's
+    // `previewAdhan`.
     String? playingSound;
 
     // Available sounds - add more as you add mp3 files
@@ -1072,30 +1272,15 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                     _TapScale(
                                       onTap: () async {
                                         if (isPlaying) {
-                                          await audioPlayer.stop();
+                                          await _stopPreview();
                                           setDialogState(
                                             () => playingSound = null,
                                           );
                                         } else {
-                                          await audioPlayer.stop();
                                           setDialogState(
                                             () => playingSound = sound['id'],
                                           );
-                                          await audioPlayer.play(
-                                            AssetSource(
-                                              'audio/${sound['id']}.mp3',
-                                            ),
-                                          );
-
-                                          audioPlayer.onPlayerComplete.listen((
-                                            _,
-                                          ) {
-                                            if (mounted) {
-                                              setDialogState(
-                                                () => playingSound = null,
-                                              );
-                                            }
-                                          });
+                                          await _playPreview(sound['id']!);
                                         }
                                       },
                                       child: Padding(
@@ -1139,6 +1324,8 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                           'المغرب',
                           'العشاء',
                         ];
+                        Navigator.pop(context);
+                        await _stopPreview();
                         for (final name in allPrayers) {
                           await prefs.setBool('adhan_enabled_$name', isEnabled);
                           await prefs.setString(
@@ -1146,34 +1333,16 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                             selectedSound,
                           );
                         }
-                        Navigator.pop(context);
+                        await _rescheduleAfterSoundChange();
+                        if (!mounted) return;
                         setState(() {});
-                        // 🔄 Reschedule with the new unified settings
-                        final prayerTimesAsync = ref.read(prayerTimesProvider);
-                        if (prayerTimesAsync.hasValue) {
-                          await PrayerAlarmScheduler.scheduleAllPrayersWithData(
-                            prayerTimesAsync.value!,
-                          );
-                        }
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text(
-                                'تم تطبيق الإعدادات على جميع الصلوات',
-                                style: TextStyle(
-                                  fontFamily: 'cairo',
-                                  color: AppColors.body,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              backgroundColor: AppColors.sheetTop,
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          );
-                        }
+                        AppToast.success(
+                          // The screen's context, not the dialog's: the
+                          // dialog has just been popped, so posting a
+                          // SnackBar through its Navigator did nothing.
+                          this.context,
+                          'تم تطبيق الإعدادات على جميع الصلوات',
+                        );
                       },
                     ),
                     // The primary action — same filled-accent language as
@@ -1182,6 +1351,8 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                     _dialogPrimaryButton(
                       label: 'حفظ',
                       onTap: () async {
+                        Navigator.pop(context);
+                        await _stopPreview();
                         await prefs.setBool(
                           'adhan_enabled_$prayerName',
                           isEnabled,
@@ -1190,16 +1361,28 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                           'adhan_sound_$prayerName',
                           selectedSound,
                         );
-                        Navigator.pop(context);
+
+                        await _rescheduleAfterSoundChange();
+                        if (!mounted) return;
                         setState(() {}); // Refresh UI to show icon change
 
-                        // 🔄 Reschedule notifications with new settings
-                        final prayerTimesAsync = ref.read(prayerTimesProvider);
-                        if (prayerTimesAsync.hasValue) {
-                          await PrayerAlarmScheduler.scheduleAllPrayersWithData(
-                            prayerTimesAsync.value!,
-                          );
-                        }
+                        // Saving used to close the dialog silently, leaving
+                        // no confirmation that anything was stored. State
+                        // the consequence, not just the outcome.
+                        final soundName =
+                            sounds.firstWhere(
+                                  (s) => s['id'] == selectedSound,
+                                  orElse: () => sounds.first,
+                                )['name'] ??
+                            '';
+                        AppToast.success(
+                          this.context,
+                          'تم حفظ الإعدادات',
+                          detail:
+                              isEnabled
+                                  ? 'سيؤذّن $prayerName بنغمة «$soundName»'
+                                  : 'تم كتم أذان $prayerName',
+                        );
                       },
                     ),
                   ],
@@ -1207,10 +1390,36 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
             ),
           ),
     ).then((_) {
-      // Clean up the player when dialog is closed/dismissed
-      audioPlayer.stop();
-      audioPlayer.dispose();
+      // Stop any preview still playing when the dialog is closed or dismissed.
+      _stopPreview();
     });
+  }
+
+  /// Re-arms every alarm after a per-prayer sound or mute change.
+  Future<void> _rescheduleAfterSoundChange() async {
+    final data = ref.read(prayerTimesProvider).value;
+    if (data == null) return;
+    await PrayerAlarmScheduler.scheduleAllPrayersWithData(data);
+  }
+
+  /// Plays [soundId] through the native player used by the alarm itself.
+  Future<void> _playPreview(String soundId) async {
+    try {
+      await _nativeChannel.invokeMethod('previewAdhan', {'soundName': soundId});
+    } catch (e) {
+      logWarning('Adhan preview failed', e);
+      if (mounted) {
+        AppToast.error(context, 'تعذّر تشغيل المعاينة');
+      }
+    }
+  }
+
+  Future<void> _stopPreview() async {
+    try {
+      await _nativeChannel.invokeMethod('stopAdhanPreview');
+    } catch (e) {
+      logWarning('Could not stop preview', e);
+    }
   }
 }
 
@@ -1241,18 +1450,6 @@ class _AnimatedPrayerCard extends StatefulWidget {
 
 class _AnimatedPrayerCardState extends State<_AnimatedPrayerCard> {
   bool isPressed = false;
-
-  // The same asymmetric shape on every row (not just the next one) — "only
-  // some corners rounded, and by a lot," echoing the Home screen's clock
-  // card and NextPrayerCard. The next row is still distinguished by its
-  // accent edge + glow + color, not by having a different silhouette from
-  // its siblings.
-  static const _rowRadius = BorderRadius.only(
-    topLeft: Radius.circular(24),
-    topRight: Radius.circular(12),
-    bottomLeft: Radius.circular(12),
-    bottomRight: Radius.circular(24),
-  );
 
   @override
   Widget build(BuildContext context) {

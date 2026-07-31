@@ -1,5 +1,5 @@
 name: myadhan
-description: "A new Flutter project."
+description: "أذاني — مواقيت الصلاة والأذان واتجاه القبلة، تعمل دون اتصال."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -30,6 +30,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Material/Cupertino strings and RTL text direction for the Arabic UI, and
+  # the locale data DateFormat resolves against.
+  flutter_localizations:
+    sdk: flutter
 
   geolocator: ^13.0.2
   intl: ^0.20.2
@@ -44,11 +48,15 @@ dependencies:
   flutter_riverpod: ^2.4.0
   http: ^1.1.0
   audioplayers: ^6.1.0
+  connectivity_plus: ^6.1.0
   
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Was nested under flutter_launcher_icons' config block, so it was never a
+  # dependency at all and `analysis_options.yaml` had nothing to include.
+  flutter_lints: ^5.0.0
   flutter_launcher_icons: "^0.14.4"
   flutter_native_splash: ^2.4.7
 
@@ -56,14 +64,7 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/mainIcon.png"
-  min_sdk_android: 21
-    
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  min_sdk_android: 24
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -92,12 +93,17 @@ flutter:
     - assets/h2.svg
     - assets/h3.svg
     - assets/ka3baInCompass.svg
-    - assets/test.svg
     - assets/arrow.svg
     - assets/settingsIcon.svg
     - assets/github.svg
     - assets/mainIcon.png
-    - assets/audio/
+    # Only the compass tick effects. The three Adhan recordings that used to be
+    # bundled here (~7 MB) were a second copy of android/app/src/main/res/raw/,
+    # kept solely so the settings preview could play them through `audioplayers`.
+    # That preview now goes through the native AdhanPlayer — the same code path
+    # the alarm itself uses — so the duplicates are gone from the download.
+    # `assets/test.svg` and `assets/Vector1.svg` were listed/kept but never
+    # referenced by any widget.
     - assets/audio/effects/
 
   # An image asset can refer to one or more resolution-specific "variants", see

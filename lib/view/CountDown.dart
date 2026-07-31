@@ -211,6 +211,11 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
     return ref
         .watch(prayerTimesProvider)
         .when(
+          // A refresh over times we already have keeps counting down instead of
+          // resetting to 00:00:00 — offline that refresh will fail, and the
+          // countdown would visibly stall for no reason the user can see.
+          skipLoadingOnRefresh: true,
+          skipLoadingOnReload: true,
           loading:
               () => Text(
                 '00:00:00',

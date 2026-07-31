@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:myadhan/services/app_logger.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:myadhan/controller/QiblahController.dart';
 import 'package:myadhan/theme/app_colors.dart';
 import 'package:myadhan/view/AppBackground.dart';
+import 'package:myadhan/view/AppToast.dart';
 import 'package:myadhan/view/CompassDialPainter.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_qiblah/flutter_qiblah.dart';
@@ -20,11 +22,11 @@ const double _kaabaLon = 39.8262;
 
 class QiblaScreen extends StatefulWidget {
   final bool isActive;
-  
-  const QiblaScreen({Key? key, this.isActive = true}) : super(key: key);
+
+  const QiblaScreen({super.key, this.isActive = true});
 
   @override
-  _QiblaScreenState createState() => _QiblaScreenState();
+  State<QiblaScreen> createState() => _QiblaScreenState();
 }
 
 class _QiblaScreenState extends State<QiblaScreen> {
@@ -52,10 +54,19 @@ class _QiblaScreenState extends State<QiblaScreen> {
 
   double? _distanceToMeccaKm;
 
+  /// Compass render throttle — see [_startCompass].
+  static const _minRenderIntervalMs = 16; // ~60 fps
+  static const _minRenderDeltaDegrees = 0.4;
+  DateTime _lastRenderedAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   double _getShortestTurns(double oldTurns, double newTurns) {
     double difference = newTurns - oldTurns;
-    while (difference < -0.5) difference += 1.0;
-    while (difference > 0.5) difference -= 1.0;
+    while (difference < -0.5) {
+      difference += 1.0;
+    }
+    while (difference > 0.5) {
+      difference -= 1.0;
+    }
     return oldTurns + difference;
   }
 
@@ -105,17 +116,36 @@ class _QiblaScreenState extends State<QiblaScreen> {
   }
 
   void _startCompass() {
-    if (_compassSubscription == null) {
-      _compassSubscription = _controller.getQiblaStream().listen((data) {
-        if (!mounted) return;
-        
-        setState(() {
-          _qiblahDirection = data as QiblahDirection;
-        });
-        
-        _processCompassAudio(data);
-      });
-    }
+    // The magnetometer emits far faster than the screen refreshes — on most
+    // devices 50-100 events a second. Every one of them used to call
+    // `setState` on this whole screen, so the dial, the Kaaba marker, the
+    // distance card and the info bar were all rebuilt dozens of times per
+    // frame, for a needle that can only move once per frame anyway. Coalescing
+    // to ~60 Hz and skipping sub-degree jitter cuts the rebuild count by an
+    // order of magnitude with no visible change in smoothness — and stops the
+    // compass tab from being the app's biggest CPU (and therefore battery)
+    // consumer while it's open.
+    _compassSubscription ??= _controller.getQiblaStream().listen((data) {
+      if (!mounted) return;
+      final direction = data as QiblahDirection;
+
+      final now = DateTime.now();
+      final sinceLastFrame =
+          now.difference(_lastRenderedAt).inMilliseconds;
+      final movedEnough =
+          _qiblahDirection == null ||
+          (direction.direction - _qiblahDirection!.direction).abs() >=
+              _minRenderDeltaDegrees;
+
+      if (sinceLastFrame >= _minRenderIntervalMs && movedEnough) {
+        _lastRenderedAt = now;
+        setState(() => _qiblahDirection = direction);
+      }
+
+      // Audio cues are driven off every sample: they trigger on crossings,
+      // which a throttled stream could step straight over.
+      _processCompassAudio(direction);
+    });
   }
 
   void _stopCompass() {
@@ -199,7 +229,7 @@ class _QiblaScreenState extends State<QiblaScreen> {
         granted = await _controller.hasPermission();
       } catch (e) {
         // 5. If the error "Already requesting" happens, we ignore it safely.
-        print("Popup is already open: $e");
+        logDebug('Compass permission popup already open: $e');
       }
     }
 
@@ -451,7 +481,7 @@ class _QiblaScreenState extends State<QiblaScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            backgroundColor: AppColors.sheetTop,
+            backgroundColor: AppColors.sheetBottom,
             surfaceTintColor: Colors.transparent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
@@ -775,23 +805,7 @@ class _QiblaScreenState extends State<QiblaScreen> {
     });
     await Future.delayed(const Duration(milliseconds: 600));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'تم إعادة التهيئة بنجاح.',
-            style: TextStyle(fontFamily: 'cairo', color: AppColors.body),
-            textAlign: TextAlign.center,
-          ),
-          duration: const Duration(seconds: 3),
-          // Matches PrayerTimeScreen's snackbar treatment — same component,
-          // same role, same look.
-          backgroundColor: AppColors.sheetTop,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      );
+      AppToast.success(context, 'تم إعادة ضبط القبلة بنجاح');
     }
     _checkPermission();
   }

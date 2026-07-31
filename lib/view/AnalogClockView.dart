@@ -14,7 +14,7 @@ class Analogclockview extends StatefulWidget {
   const Analogclockview({super.key, required this.size, this.onTick});
 
   @override
-  _AnalogclockviewState createState() => _AnalogclockviewState();
+  State<Analogclockview> createState() => _AnalogclockviewState();
 }
 
 class _AnalogclockviewState extends State<Analogclockview> {
@@ -36,6 +36,20 @@ class _AnalogclockviewState extends State<Analogclockview> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onTick?.call(model.time);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Follow the ambient TickerMode, which MainScreen's FadeIndexedStack turns
+    // off for tabs that aren't on screen. The clock used to keep its
+    // once-a-second timer running for the whole session no matter which tab
+    // the user was on, repainting a dial nobody could see.
+    if (TickerMode.valuesOf(context).enabled) {
+      controller.resume();
+    } else {
+      controller.pause();
+    }
   }
 
   @override
@@ -156,5 +170,11 @@ class ClockPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant ClockPainter oldDelegate) =>
+      // Repaint only when a hand has actually moved. `=> true` meant a repaint
+      // on every parent rebuild, including ones that had nothing to do with
+      // the clock.
+      oldDelegate.degree.second != degree.second ||
+      oldDelegate.degree.minuteAngle != degree.minuteAngle ||
+      oldDelegate.degree.hourAngle != degree.hourAngle;
 }

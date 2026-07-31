@@ -2,25 +2,46 @@ import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
 import 'package:myadhan/model/PrayerTimeModel.dart';
+import 'package:myadhan/services/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-/// Prayer Alarm Scheduler - Uses native Android AlarmManager for persistent alarms
-/// These alarms show the full-screen Adhan even when the app is killed
+/// Prayer Alarm Scheduler — uses native Android AlarmManager for persistent
+/// alarms. These fire the Adhan even when the app is killed.
 class PrayerAlarmScheduler {
-  static const MethodChannel _channel = MethodChannel('com.myadhan/notification');
+  static const MethodChannel _channel = MethodChannel(
+    'com.myadhan/notification',
+  );
   static final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  /// Schedule all prayer alarms using provided PrayerTimeModel data
-  /// This is the Riverpod-friendly version that receives prayer times as parameter
-  static Future<void> scheduleAllPrayersWithData(PrayerTimeModel data) async {
-    // ⚠️ CRITICAL: Initialize the plugin before using it
-    const androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
-    const iosSettings = DarwinInitializationSettings();
-    const settings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+  /// Status-bar icon. Must be the white-on-transparent silhouette in
+  /// `res/drawable/`, not the full-colour launcher icon: Android masks the
+  /// small icon to a single colour, so a coloured bitmap renders as a solid
+  /// white blob. This file previously disagreed with `main.dart` about which
+  /// of the two to use, and whichever initialised last won.
+  static const _smallIcon = '@drawable/ic_stat_adhan';
+
+  /// One-time plugin init. This used to run on every call to
+  /// [scheduleAllPrayersWithData] — which happens on launch, on every settings
+  /// change and on every day rollover — re-registering the plugin's callbacks
+  /// each time for no benefit.
+  static bool _initialised = false;
+
+  static Future<void> ensureInitialised() async {
+    if (_initialised) return;
+    const settings = InitializationSettings(
+      android: AndroidInitializationSettings(_smallIcon),
+      iOS: DarwinInitializationSettings(),
+    );
     await _notificationsPlugin.initialize(settings);
-    
+    _initialised = true;
+  }
+
+  /// Schedule all prayer alarms from a [PrayerTimeModel].
+  static Future<void> scheduleAllPrayersWithData(PrayerTimeModel data) async {
+    await ensureInitialised();
+
     // Cancel any existing alarms first
     await cancelAll();
 
@@ -35,11 +56,11 @@ class PrayerAlarmScheduler {
       {'id': 5, 'name': 'العشاء', 'time': data.isha},
     ];
 
-    for (var prayer in prayers) {
-      int id = prayer['id'] as int;
-      String name = prayer['name'] as String;
-      DateTime prayerTime = prayer['time'] as DateTime;
-      String timeStr = DateFormat('HH:mm').format(prayerTime);
+    for (final prayer in prayers) {
+      final id = prayer['id'] as int;
+      final name = prayer['name'] as String;
+      final prayerTime = prayer['time'] as DateTime;
+      final timeStr = DateFormat('HH:mm').format(prayerTime);
 
       // Build scheduled DateTime for today
       var scheduledTime = DateTime(
@@ -55,66 +76,81 @@ class PrayerAlarmScheduler {
         scheduledTime = scheduledTime.add(const Duration(days: 1));
       }
 
-      // Store prayer info + trigger timestamp (native side + widget read these with
-      // 'flutter.' prefix) for every prayer, even if adhan is disabled — the widget
-      // still needs to show and track this prayer's time.
+      // Store prayer info + trigger timestamp (native side + widget read these
+      // with the 'flutter.' prefix) for every prayer, even if adhan is
+      // disabled — the widget still needs to show and track this prayer.
       await prefs.setString('prayer_${id}_name', name);
       await prefs.setString('prayer_${id}_time', timeStr);
-      await prefs.setInt('prayer_${id}_trigger_millis', scheduledTime.millisecondsSinceEpoch);
+      await prefs.setInt(
+        'prayer_${id}_trigger_millis',
+        scheduledTime.millisecondsSinceEpoch,
+      );
 
       // Check if adhan is enabled for this prayer
-      bool isEnabled = prefs.getBool('adhan_enabled_$name') ?? true;
+      final isEnabled = prefs.getBool('adhan_enabled_$name') ?? true;
       if (!isEnabled) {
-        print('⏭️ Skipping $name sound alarm - adhan disabled');
+        logDebug('⏭️ Skipping $name sound alarm — adhan disabled');
         continue;
       }
 
       // Get selected sound for this prayer
-      String soundName = prefs.getString('adhan_sound_$name') ?? 'adhan1';
+      final soundName = prefs.getString('adhan_sound_$name') ?? 'adhan1';
       await prefs.setString('adhan_sound_$name', soundName);
 
       // Schedule 4-minute reminder notification before each prayer
       final reminderTime = scheduledTime.subtract(const Duration(minutes: 4));
       if (reminderTime.isAfter(now)) {
         await _scheduleReminderNotification(id, name, timeStr, reminderTime);
-        print('🔔 Reminder scheduled for $name at $reminderTime (4 min before)');
       }
 
-      // Schedule NATIVE alarm via AlarmManager → PrayerAlarmReceiver → AdhanAlarmService
-      // This handles audio playback on ALARM stream (not interrupted by notifications)
+      // Schedule NATIVE alarm via AlarmManager → PrayerAlarmReceiver →
+      // AdhanAlarmService, which plays audio on the ALARM stream.
       try {
         await _channel.invokeMethod('scheduleNativePrayerAlarm', {
           'prayerId': id,
           'triggerAtMillis': scheduledTime.millisecondsSinceEpoch,
         });
-        print('✅ Native alarm scheduled for $name at $scheduledTime (sound: $soundName)');
       } catch (e) {
-        print('⚠️ Native alarm failed for $name: $e — falling back to notification sound');
-        // Fallback: schedule Flutter notification WITH sound
-        await _scheduleLocalNotification(id, name, timeStr, scheduledTime, soundName, withSound: true);
+        logWarning('Native alarm failed for $name — using notification sound');
+        // Fallback: schedule a Flutter notification WITH sound.
+        await _scheduleLocalNotification(
+          id,
+          name,
+          timeStr,
+          scheduledTime,
+          soundName,
+          withSound: true,
+        );
       }
     }
 
-    // Ask the native side to (re)derive alarms from the prefs we just wrote. This is
-    // also what schedules the silent per-prayer widget-refresh alarms, so the home
-    // screen widget re-renders exactly when each prayer's time arrives instead of only
-    // on app open / boot / the nightly worker.
+    // Ask the native side to (re)derive alarms from the prefs we just wrote.
+    // This also schedules the silent per-prayer widget-refresh alarms.
     try {
       await _channel.invokeMethod('rescheduleFromPrefs');
     } catch (e) {
-      print('⚠️ Failed to reschedule widget refresh alarms: $e');
+      logWarning('Failed to reschedule widget refresh alarms', e);
     }
 
-    // Start the persistent countdown notification
+    // Start the persistent countdown notification (a no-op on the native side
+    // when the user has switched it off).
     try {
       await _channel.invokeMethod('startCountdownService');
-      print('⏱️ Countdown notification service started');
     } catch (e) {
-      print('⚠️ Failed to start countdown service: $e');
+      logWarning('Failed to start countdown service', e);
     }
   }
 
-  /// Schedule a single local notification
+  /// Converts a wall-clock [DateTime] to the absolute instant the notification
+  /// plugin needs.
+  ///
+  /// `tz.local` is resolved from the device at startup by `LocalTimezone`;
+  /// before that fix it was pinned to Africa/Algiers, which silently shifted
+  /// every reminder by the difference between the user's offset and UTC+1.
+  static tz.TZDateTime _toTz(DateTime local) =>
+      tz.TZDateTime.from(local, tz.local);
+
+  /// Schedule a single local notification.
   static Future<void> _scheduleLocalNotification(
     int id,
     String name,
@@ -123,29 +159,32 @@ class PrayerAlarmScheduler {
     String soundName, {
     bool withSound = false, // true = fallback when native alarm fails
   }) async {
-    final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
-
     await _notificationsPlugin.zonedSchedule(
       id + 100, // Different ID to avoid conflict
       'حان وقت صلاة $name',
       'الوقت: $timeStr',
-      tzScheduledTime,
+      _toTz(scheduledTime),
       NotificationDetails(
         android: AndroidNotificationDetails(
           withSound ? 'adhan_sound_channel' : 'prayer_visual_channel',
-          withSound ? 'Adhan Sound' : 'Prayer Reminders',
-          channelDescription: withSound
-              ? 'Adhan sound fallback'
-              : 'Visual prayer time reminders',
+          withSound ? 'الأذان' : 'تنبيهات الصلاة',
+          channelDescription:
+              withSound
+                  ? 'صوت الأذان عند دخول وقت الصلاة'
+                  : 'تنبيه مرئي عند دخول وقت الصلاة',
           importance: Importance.max,
           priority: Priority.high,
+          category: AndroidNotificationCategory.alarm,
           playSound: withSound,
-          sound: withSound ? RawResourceAndroidNotificationSound(soundName) : null,
-          actions: [const AndroidNotificationAction(
-              'stop_audio_id', 
-              'إلغاء',    
-              cancelNotification: true, 
-          ),]
+          sound:
+              withSound ? RawResourceAndroidNotificationSound(soundName) : null,
+          actions: const [
+            AndroidNotificationAction(
+              'stop_audio_id',
+              'إلغاء',
+              cancelNotification: true,
+            ),
+          ],
         ),
         iOS: const DarwinNotificationDetails(),
       ),
@@ -154,20 +193,18 @@ class PrayerAlarmScheduler {
     );
   }
 
-  /// Schedule a 4-minute reminder notification before a prayer
+  /// Schedule a 4-minute reminder notification before a prayer.
   static Future<void> _scheduleReminderNotification(
     int id,
     String name,
     String timeStr,
     DateTime reminderTime,
   ) async {
-    final tzReminderTime = tz.TZDateTime.from(reminderTime, tz.local);
-
     await _notificationsPlugin.zonedSchedule(
-      id + 200, // Unique ID for reminders (200-205)
+      id + 200, // Unique ID for reminders (201-205)
       'باقي ٤ دقائق على صلاة $name',
       'وقت الصلاة: $timeStr',
-      tzReminderTime,
+      _toTz(reminderTime),
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'prayer_reminder_channel',
@@ -175,6 +212,7 @@ class PrayerAlarmScheduler {
           channelDescription: 'تذكير قبل ٤ دقائق من وقت الصلاة',
           importance: Importance.high,
           priority: Priority.high,
+          category: AndroidNotificationCategory.reminder,
           playSound: false,
           enableVibration: true,
           autoCancel: true,
@@ -186,18 +224,18 @@ class PrayerAlarmScheduler {
     );
   }
 
-  /// Request exact alarm permission (required for Android 12+)
+  /// Request exact alarm permission (required for Android 12+).
   static Future<bool> requestExactAlarmPermission() async {
     try {
       final result = await _channel.invokeMethod('requestExactAlarmPermission');
       return result == true;
     } catch (e) {
-      print('Error requesting exact alarm permission: $e');
+      logWarning('Error requesting exact alarm permission', e);
       return false;
     }
   }
 
-  /// Check if exact alarm permission is granted
+  /// Check if exact alarm permission is granted.
   static Future<bool> checkExactAlarmPermission() async {
     try {
       final result = await _channel.invokeMethod('checkExactAlarmPermission');
@@ -207,13 +245,17 @@ class PrayerAlarmScheduler {
     }
   }
 
-  /// Cancel all scheduled alarms (both Flutter notifications and native alarms)
+  /// Cancel all scheduled alarms (both Flutter notifications and native).
   static Future<void> cancelAll() async {
-    await _notificationsPlugin.cancelAll();
+    try {
+      await _notificationsPlugin.cancelAll();
+    } catch (e) {
+      logWarning('Error cancelling notifications', e);
+    }
     try {
       await _channel.invokeMethod('cancelAllNativeAlarms');
     } catch (e) {
-      print('Error cancelling native alarms: $e');
+      logWarning('Error cancelling native alarms', e);
     }
   }
 }

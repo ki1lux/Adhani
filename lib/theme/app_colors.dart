@@ -78,6 +78,12 @@ abstract final class AppColors {
   /// Aligned with Qibla / alarm working.
   static const success = Color(0xFF5FE08E);
 
+  /// Same hue, darkened — for a solid fill that has to carry white content
+  /// on top of it (the toast's confirmation badge). The mint above is too
+  /// light to sit a white glyph on. Mirrors the accent/accentDeep and
+  /// danger/dangerDeep pairing rather than introducing a new hue.
+  static const successDeep = Color(0xFF34B26C);
+
   /// Warnings, rating star. Reserved — not yet used.
   static const warning = Color(0xFFFFC46B);
 }

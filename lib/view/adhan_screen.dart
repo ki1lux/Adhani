@@ -6,6 +6,7 @@ import 'package:myadhan/theme/app_colors.dart';
 import 'package:myadhan/view/AppBackground.dart';
 import 'package:myadhan/view/AnalogClockView.dart';
 import 'package:myadhan/view/NextPrayerCard.dart';
+import 'package:myadhan/view/OfflineBanner.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,17 +14,31 @@ class AdhanScreen extends ConsumerStatefulWidget {
   const AdhanScreen({super.key});
 
   @override
-  ConsumerState<AdhanScreen> createState() => _adhanScreen();
+  ConsumerState<AdhanScreen> createState() => _AdhanScreenState();
 }
 
-class _adhanScreen extends ConsumerState<AdhanScreen> {
+class _AdhanScreenState extends ConsumerState<AdhanScreen> {
   static const _contentColor = AppColors.heading;
   static const _mutedColor = AppColors.secondary;
 
   String _cachedHijri = '';
   String _city = '';
   String _country = '';
-  DateTime _now = DateTime.now();
+
+  /// The clock's current time, held in a notifier rather than in State.
+  ///
+  /// The analog clock ticks once a second, and its `onTick` used to call
+  /// `setState` on this whole screen — so every second rebuilt the arch card,
+  /// the next-prayer card, the location row and the offline banner in order to
+  /// change one line of text. Only the text listens now, so a tick repaints
+  /// exactly what changed.
+  final ValueNotifier<DateTime> _now = ValueNotifier(DateTime.now());
+
+  @override
+  void dispose() {
+    _now.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -58,9 +73,14 @@ class _adhanScreen extends ConsumerState<AdhanScreen> {
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.sizeOf(context);
     final statusBarHeight = MediaQuery.paddingOf(context).top;
-    // ClockPainter now maps `size` directly to visible diameter (see
+    // ClockPainter maps `size` directly to visible diameter (see
     // AnalogClockView.dart), so this is close to the actual on-screen size.
-    final clockSize = screenSize.width * 0.52;
+    //
+    // Driven by the *shorter* side and capped: keyed to width alone, a
+    // landscape phone or a tablet produced a clock taller than the viewport,
+    // pushing the arch card past the bottom of the screen with an unbounded
+    // Column above it — a guaranteed overflow rather than a scroll.
+    final clockSize = (screenSize.shortestSide * 0.52).clamp(120.0, 260.0);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -104,9 +124,7 @@ class _adhanScreen extends ConsumerState<AdhanScreen> {
                       SizedBox(height: statusBarHeight + 24),
                       Analogclockview(
                         size: clockSize,
-                        onTick: (time) {
-                          if (mounted) setState(() => _now = time);
-                        },
+                        onTick: (time) => _now.value = time,
                       ),
                       const SizedBox(height: 24),
                     ],
@@ -137,6 +155,9 @@ class _adhanScreen extends ConsumerState<AdhanScreen> {
                               ),
                               const SizedBox(height: 16),
                               _buildLocationRow(),
+                              // The countdown above is driven by cached times
+                              // when we're offline; this is what says so.
+                              const OfflineBanner(),
                               // Clears the floating bottom nav bar
                               // (MainScreen's Scaffold uses extendBody: true).
                               const SizedBox(height: 100),
@@ -160,7 +181,6 @@ class _adhanScreen extends ConsumerState<AdhanScreen> {
     // MaterialApp.localizationsDelegates/supportedLocales, so that
     // resolves unreliably instead of reflecting the real device setting.
     final locale = WidgetsBinding.instance.platformDispatcher.locale.toString();
-    final timeText = intl.DateFormat.jm(locale).format(_now);
 
     final hijri = ref
         .watch(prayerTimesProvider)
@@ -182,15 +202,19 @@ class _adhanScreen extends ConsumerState<AdhanScreen> {
 
     return Column(
       children: [
-        Text(
-          timeText,
-          textDirection: TextDirection.ltr,
-          style: const TextStyle(
-            fontFamily: 'cairo',
-            color: _contentColor,
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-          ),
+        ValueListenableBuilder<DateTime>(
+          valueListenable: _now,
+          builder:
+              (context, now, _) => Text(
+                intl.DateFormat.jm(locale).format(now),
+                textDirection: TextDirection.ltr,
+                style: const TextStyle(
+                  fontFamily: 'cairo',
+                  color: _contentColor,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
         ),
         if (hijri.isNotEmpty) ...[
           const SizedBox(height: 4),

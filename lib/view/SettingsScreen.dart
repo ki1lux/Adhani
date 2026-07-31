@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:myadhan/theme/app_colors.dart';
-import 'package:myadhan/view/AppBackground.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:myadhan/prayer_alarm_scheduler.dart';
 import 'package:myadhan/providers/prayer_times_provider.dart';
+import 'package:myadhan/services/app_config.dart';
+import 'package:myadhan/services/app_logger.dart';
+import 'package:myadhan/theme/app_colors.dart';
+import 'package:myadhan/view/AppBackground.dart';
+import 'package:myadhan/view/AppToast.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -17,8 +20,27 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  bool isFullScreen = true;
-  Map<String, dynamic> alarmStatus = {};
+  static const _channel = MethodChannel('com.myadhan/notification');
+
+  /// Mirrors `PrayerCountdownService.KEY_COUNTDOWN_ENABLED` on the native
+  /// side — written here without the `flutter.` prefix, which the plugin adds
+  /// on disk (see CLAUDE.md's shared-storage contract).
+  static const _countdownEnabledKey = 'countdown_notification_enabled';
+
+  /// Whether the persistent countdown notification is on.
+  ///
+  /// This replaces an "إشعار ملء الشاشة" switch that was wired to nothing but
+  /// its own `setState` — it wasn't persisted, nothing read it, and the app
+  /// has never used a full-screen intent. This one controls a real thing the
+  /// user can see and has a reason to want off: an ongoing notification backed
+  /// by a foreground service.
+  bool _countdownEnabled = true;
+
+  /// Per-prayer alarm state, read from the same prefs the native scheduler
+  /// arms alarms from. Previously always empty, so "حالة التنبيهات" opened on
+  /// a permanent "no data available".
+  Map<String, _AlarmStatus> _alarmStatus = {};
+  bool _exactAlarmsAllowed = true;
 
   // Shared with the rest of the app: rows and dialogs use the same
   // translucent fill + hairline border as PrayerTimeScreen's cards and
@@ -27,6 +49,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   static final _dialogShape = RoundedRectangleBorder(
     borderRadius: BorderRadius.circular(24),
   );
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _countdownEnabled = prefs.getBool(_countdownEnabledKey) ?? true;
+    });
+  }
+
+  /// Turns the ongoing countdown notification on or off, and starts/stops the
+  /// foreground service behind it.
+  Future<void> _setCountdownEnabled(bool enabled) async {
+    setState(() => _countdownEnabled = enabled);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_countdownEnabledKey, enabled);
+
+    try {
+      await _channel.invokeMethod(
+        enabled ? 'startCountdownService' : 'stopCountdownService',
+      );
+    } catch (e) {
+      logWarning('Could not toggle countdown service', e);
+    }
+
+    if (!mounted) return;
+    AppToast.success(
+      context,
+      enabled ? 'تم تفعيل إشعار العدّاد' : 'تم إيقاف إشعار العدّاد',
+      detail:
+          enabled
+              ? 'سيظهر الوقت المتبقي للصلاة القادمة في شريط الإشعارات'
+              : 'لن يظهر الإشعار الدائم بعد الآن',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,10 +120,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                       _sectionLabel('التنبيهات'),
                       _buildSwitchRow(
-                        Icons.notifications_outlined,
-                        'إشعار ملء الشاشة',
-                        isFullScreen,
-                        (val) => setState(() => isFullScreen = val),
+                        Icons.timer_outlined,
+                        'إشعار العدّاد الدائم',
+                        _countdownEnabled,
+                        _setCountdownEnabled,
+                        subtitle: 'يعرض الوقت المتبقي للصلاة القادمة',
                       ),
                       _buildRow(
                         Icons.info_outline,
@@ -93,8 +157,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                       const SizedBox(height: 24),
                       _sectionLabel('التطبيق'),
-                      _buildRow(Icons.share_outlined, 'مشاركة التطبيق', () {}),
-                      _buildRow(Icons.star_outline, 'تقييم التطبيق', () {}),
+                      _buildRow(
+                        Icons.share_outlined,
+                        'مشاركة التطبيق',
+                        _shareApp,
+                      ),
+                      _buildRow(Icons.star_outline, 'تقييم التطبيق', _rateApp),
+                      _buildRow(
+                        Icons.privacy_tip_outlined,
+                        'سياسة الخصوصية',
+                        _openPrivacyPolicy,
+                      ),
+                      _buildRow(
+                        Icons.source_outlined,
+                        'مصادر البيانات',
+                        _showDataSourcesDialog,
+                      ),
 
                       const SizedBox(height: 36),
                       _buildCredits(),
@@ -192,46 +270,195 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     IconData icon,
     String title,
     bool value,
-    ValueChanged<bool> onChanged,
-  ) {
+    ValueChanged<bool> onChanged, {
+    String? subtitle,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.cardFill,
-          borderRadius: _rowRadius,
-          border: Border.all(color: AppColors.cardBorder),
-        ),
-        padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.secondary, size: 22),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: AppColors.body,
-                  fontSize: 15,
-                  fontFamily: 'cairo',
-                  fontWeight: FontWeight.w500,
+      // One node for the whole row, so a screen reader announces
+      // "إشعار العدّاد الدائم, switch, on" instead of reading the label and
+      // the control as two unrelated things.
+      child: MergeSemantics(
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardFill,
+            borderRadius: _rowRadius,
+            border: Border.all(color: AppColors.cardBorder),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.secondary, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: AppColors.body,
+                        fontSize: 15,
+                        fontFamily: 'cairo',
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          color: AppColors.label,
+                          fontSize: 11.5,
+                          fontFamily: 'cairo',
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ),
-            Switch(
-              value: value,
-              onChanged: onChanged,
-              // Accent is reserved for genuine active/selected indicators —
-              // this is one.
-              activeThumbColor: AppColors.accent,
-              activeTrackColor: AppColors.accentFill,
-              inactiveThumbColor: AppColors.faint,
-              inactiveTrackColor: AppColors.cardBorder,
-              overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Switch(
+                value: value,
+                onChanged: onChanged,
+                // Accent is reserved for genuine active/selected indicators —
+                // this is one.
+                activeThumbColor: AppColors.accent,
+                activeTrackColor: AppColors.accentFill,
+                inactiveThumbColor: AppColors.faint,
+                inactiveTrackColor: AppColors.cardBorder,
+                overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  // ── App section actions ───────────────────────────────────────────────
+  // These three rows were `() {}` — visible, tappable, and doing nothing.
+  // A reviewer taps every row on the settings screen.
+
+  /// Opens the system share sheet via a one-off ACTION_SEND on the existing
+  /// MethodChannel, rather than pulling in a plugin for a single intent.
+  Future<void> _shareApp() async {
+    const text =
+        '${AppConfig.appName} — تطبيق مواقيت الصلاة والأذان واتجاه القبلة\n'
+        '${AppConfig.playStoreUrl}';
+    try {
+      final shared = await _channel.invokeMethod<bool>('shareApp', {
+        'text': text,
+      });
+      if (shared == true || !mounted) return;
+    } catch (e) {
+      logWarning('Share sheet unavailable', e);
+      if (!mounted) return;
+    }
+    // No app can handle a share intent — fall back to the clipboard rather
+    // than leaving the tap with no visible result.
+    await Clipboard.setData(const ClipboardData(text: text));
+    if (!mounted) return;
+    AppToast.success(context, 'تم نسخ رابط التطبيق');
+  }
+
+  /// Opens the Play listing — the installed Play app when it's there, the web
+  /// listing when it isn't.
+  Future<void> _rateApp() async {
+    final market = Uri.parse(AppConfig.playStoreMarketUri);
+    try {
+      if (await canLaunchUrl(market)) {
+        await launchUrl(market, mode: LaunchMode.externalApplication);
+        return;
+      }
+    } catch (e) {
+      logWarning('Play app not available', e);
+    }
+
+    final opened = await _openExternal(AppConfig.playStoreUrl);
+    if (!opened && mounted) {
+      AppToast.error(
+        context,
+        'تعذّر فتح متجر Play',
+        detail: 'يمكنك تقييم التطبيق من صفحته في المتجر',
+      );
+    }
+  }
+
+  /// Play requires the privacy policy to be reachable from inside an app that
+  /// requests location, not only from the store listing.
+  Future<void> _openPrivacyPolicy() async {
+    final opened = await _openExternal(AppConfig.privacyPolicyUrl);
+    if (!opened && mounted) {
+      AppToast.error(context, 'تعذّر فتح سياسة الخصوصية');
+    }
+  }
+
+  Future<bool> _openExternal(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      logWarning('Could not open external URL', e);
+      return false;
+    }
+  }
+
+  /// Attribution for the two services the app sends coordinates to. Both sets
+  /// of terms ask for it, and naming them in-app matches what the Play Data
+  /// Safety form has to declare.
+  void _showDataSourcesDialog() {
+    showDialog<void>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            backgroundColor: AppColors.sheetBottom,
+            surfaceTintColor: Colors.transparent,
+            shape: _dialogShape,
+            title: const Text(
+              'مصادر البيانات',
+              style: TextStyle(
+                color: AppColors.heading,
+                fontFamily: 'cairo',
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: const SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'مواقيت الصلاة والتاريخ الهجري: Aladhan API\n'
+                    'أسماء المدن: OpenStreetMap Nominatim\n\n'
+                    'يُرسَل موقعك الجغرافي إلى هاتين الخدمتين لحساب المواقيت '
+                    'ومعرفة اسم مدينتك فقط. لا يجمع التطبيق أي بيانات أخرى ولا '
+                    'يحتفظ بها على أي خادم.',
+                    style: TextStyle(
+                      color: AppColors.secondary,
+                      fontFamily: 'cairo',
+                      fontSize: 13.5,
+                      height: 1.8,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text(
+                  'إغلاق',
+                  style: TextStyle(
+                    color: AppColors.secondary,
+                    fontFamily: 'cairo',
+                  ),
+                ),
+              ),
+            ],
+          ),
     );
   }
 
@@ -250,35 +477,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(999),
-            onTap: () async {
-              final url = Uri.parse("https://github.com/ki1lux");
-              if (await canLaunchUrl(url)) {
-                await launchUrl(url, mode: LaunchMode.externalApplication);
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              // Material Icons has no GitHub mark, so this is a local SVG
-              // tinted through the palette like the app's other custom icons.
-              child: SvgPicture.asset(
-                'assets/github.svg',
-                width: 24,
-                height: 24,
-                colorFilter: const ColorFilter.mode(
-                  AppColors.secondary,
-                  BlendMode.srcIn,
+        Semantics(
+          label: 'صفحة المطوّر على GitHub',
+          button: true,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: () => _openExternal(AppConfig.developerUrl),
+              child: Padding(
+                // 24px icon + 12px on each side = 48x48, the minimum
+                // accessible tap target.
+                padding: const EdgeInsets.all(12),
+                // Material Icons has no GitHub mark, so this is a local SVG
+                // tinted through the palette like the app's other custom icons.
+                child: SvgPicture.asset(
+                  'assets/github.svg',
+                  width: 24,
+                  height: 24,
+                  colorFilter: const ColorFilter.mode(
+                    AppColors.secondary,
+                    BlendMode.srcIn,
+                  ),
                 ),
               ),
             ),
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
-          "khalilbenfiala001@gmail.com",
+        const SelectableText(
+          AppConfig.supportEmail,
           textDirection: TextDirection.ltr,
           style: TextStyle(
             color: AppColors.faint,
@@ -288,31 +516,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
         const SizedBox(height: 14),
         const Text(
-          'Adhani · 1.0',
+          // Was hardcoded 'Adhani · 1.0' — one more place for the shipped
+          // version to disagree with pubspec.yaml.
+          'Adhani · v${AppConfig.version}',
           textDirection: TextDirection.ltr,
           style: TextStyle(
-            color: AppColors.inactive,
+            // `inactive` is 2.9:1 against the navy surface — below the 4.5:1
+            // WCAG AA minimum, and this is 11px text.
+            color: AppColors.label,
             fontSize: 11,
             fontFamily: 'cairo',
           ),
         ),
-      ],
-    );
-  }
-
-  void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(fontFamily: 'cairo', color: AppColors.body),
-          textAlign: TextAlign.center,
+        const SizedBox(height: 4),
+        const Text(
+          AppConfig.dataAttribution,
+          textDirection: TextDirection.ltr,
+          style: TextStyle(
+            color: AppColors.label,
+            fontSize: 10.5,
+            fontFamily: 'cairo',
+          ),
         ),
-        // Same floating treatment PrayerTimeScreen and QiblaScreen use.
-        backgroundColor: AppColors.sheetTop,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+      ],
     );
   }
 
@@ -327,18 +553,74 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     const channel = MethodChannel('com.myadhan/notification');
     try {
       await channel.invokeMethod('rescheduleFromPrefs');
-      if (mounted) _showSnack('تم تحديث الودجت ✅');
+      if (mounted) {
+        AppToast.success(
+          context,
+          'تم تحديث الودجت',
+          detail: 'أعيد حساب مواقيت اليوم على الشاشة الرئيسية',
+        );
+      }
     } catch (e) {
-      if (mounted) _showSnack('تعذر تحديث الودجت');
+      if (mounted) {
+        AppToast.error(
+          context,
+          'تعذر تحديث الودجت',
+          detail: 'تأكد من أذونات التنبيه ثم حاول مجددًا',
+        );
+      }
     }
   }
 
-  void _showAlarmStatusDialog() {
-    showDialog(
+  /// Reads the same `prayer_{id}_*` prefs the native scheduler arms alarms
+  /// from, so this dialog reports what is actually scheduled rather than what
+  /// the UI hopes is scheduled.
+  Future<void> _loadAlarmStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final exact = await PrayerAlarmScheduler.checkExactAlarmPermission();
+    final now = DateTime.now();
+    final result = <String, _AlarmStatus>{};
+
+    for (var id = 1; id <= 5; id++) {
+      final name = prefs.getString('prayer_${id}_name');
+      final time = prefs.getString('prayer_${id}_time');
+      if (name == null || time == null) continue;
+
+      final trigger = prefs.getInt('prayer_${id}_trigger_millis');
+      final enabled = prefs.getBool('adhan_enabled_$name') ?? true;
+
+      DateTime? next;
+      if (trigger != null && trigger > 0) {
+        next = DateTime.fromMillisecondsSinceEpoch(trigger);
+      }
+
+      result[name] = _AlarmStatus(
+        time: time,
+        enabled: enabled,
+        isTomorrow: next != null && next.day != now.day,
+        scheduled: next != null && next.isAfter(now),
+      );
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _alarmStatus = result;
+      _exactAlarmsAllowed = exact;
+    });
+  }
+
+  Future<void> _showAlarmStatusDialog() async {
+    // Loaded on open rather than never: `alarmStatus` was declared, rendered
+    // and left empty, so this dialog always said "no data available".
+    await _loadAlarmStatus();
+    if (!mounted) return;
+
+    final entries = _alarmStatus.entries.toList();
+
+    await showDialog<void>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          backgroundColor: AppColors.sheetTop,
+          backgroundColor: AppColors.sheetBottom,
           // Material 3 tints dialog surfaces by default, which made this
           // screen's dialogs a different shade from the rest of the app's.
           surfaceTintColor: Colors.transparent,
@@ -354,59 +636,79 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children:
-                  alarmStatus.isEmpty
-                      ? [
-                        const Text(
-                          'لا تتوفر بيانات عن التنبيهات حاليًا.',
-                          style: TextStyle(
-                            color: AppColors.secondary,
-                            fontFamily: 'cairo',
-                            fontSize: 14,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!_exactAlarmsAllowed) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardFill,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.cardBorder),
+                    ),
+                    child: const Text(
+                      'إذن «التنبيهات الدقيقة» غير مفعّل — قد يتأخر الأذان '
+                      'بضع دقائق. فعّله من «إصلاح مشاكل التنبيه».',
+                      style: TextStyle(
+                        color: AppColors.warning,
+                        fontFamily: 'cairo',
+                        fontSize: 12.5,
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                if (entries.isEmpty)
+                  const Text(
+                    'لم تُجدول أي تنبيهات بعد. افتح شاشة المواقيت لتحميل '
+                    'مواقيت اليوم.',
+                    style: TextStyle(
+                      color: AppColors.secondary,
+                      fontFamily: 'cairo',
+                      fontSize: 14,
+                      height: 1.7,
+                    ),
+                  )
+                else
+                  ...entries.map((entry) {
+                    final name = entry.key;
+                    final status = entry.value;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            name,
+                            style: TextStyle(
+                              color:
+                                  status.enabled
+                                      ? AppColors.body
+                                      : AppColors.faint,
+                              fontFamily: 'cairo',
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
-                      ]
-                      : alarmStatus.entries.map((entry) {
-                        final prayerName = entry.key;
-                        final data = entry.value as Map<String, dynamic>;
-                        final isPassed = data['isPassed'] as bool;
-                        final nextOccurrence = data['nextOccurrence'] as String;
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                prayerName,
-                                style: const TextStyle(
-                                  color: AppColors.body,
-                                  fontFamily: 'cairo',
-                                  fontSize: 16,
-                                ),
-                              ),
-                              Text(
-                                isPassed
-                                    ? 'غدًا $nextOccurrence'
-                                    : 'اليوم ${data['time']}',
-                                style: TextStyle(
-                                  color:
-                                      isPassed
-                                          ? AppColors.warning
-                                          : AppColors.success,
-                                  fontFamily: 'cairo',
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
+                          Text(
+                            status.label,
+                            textDirection: TextDirection.rtl,
+                            style: TextStyle(
+                              color: status.color,
+                              fontFamily: 'cairo',
+                              fontSize: 13.5,
+                            ),
                           ),
-                        );
-                      }).toList(),
+                        ],
+                      ),
+                    );
+                  }),
+              ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text(
                 'إغلاق',
                 style: TextStyle(
@@ -422,11 +724,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   void _showTroubleshootDialog() {
-    showDialog(
+    // The builder's parameter used to be called `context`, shadowing the
+    // State's. Every `AppToast(context, ...)` inside therefore posted to the
+    // *dialog's* Navigator — which is torn down the moment the dialog closes,
+    // so a toast fired after an await landed on a defunct element. Naming it
+    // `dialogContext` makes the two impossible to confuse.
+    showDialog<void>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          backgroundColor: AppColors.sheetTop,
+          backgroundColor: AppColors.sheetBottom,
           surfaceTintColor: Colors.transparent,
           shape: _dialogShape,
           title: const Text(
@@ -451,7 +758,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     if (!granted) {
                       await PrayerAlarmScheduler.requestExactAlarmPermission();
                     } else if (mounted) {
-                      _showSnack('الإذن مفعل بالفعل ✅');
+                      // `this.context` — the screen's, which outlives the
+                      // dialog and is guarded by the `mounted` check above.
+                      AppToast.success(context, 'الإذن مفعل بالفعل');
                     }
                   },
                 ),
@@ -459,10 +768,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 _buildTroubleshootItem(
                   "2. تحسين البطارية (Battery Optimization)",
                   "بعض الهواتف توقف التطبيق في الخلفية. يرجى استثناء التطبيق من تحسين البطارية.",
-                  () async {
-                    const channel = MethodChannel('com.myadhan/notification');
-                    await channel.invokeMethod('openBatterySettings');
-                  },
+                  _openBatterySettings,
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -479,7 +785,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text(
                 'إغلاق',
                 style: TextStyle(
@@ -543,6 +849,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  /// Hands off to the native handler, which opens the battery-optimisation
+  /// list and falls back to the app's own settings page when a device doesn't
+  /// have that screen.
+  ///
+  /// The Dart fallback this replaces tried to launch
+  /// `package:com.example.myadhan` through `url_launcher` — not a launchable
+  /// URI scheme, and naming the pre-rename package. It could never have
+  /// worked, so a device without the battery screen got a dialog that closed
+  /// and did nothing.
+  Future<void> _openBatterySettings() async {
+    try {
+      await _channel.invokeMethod('openBatterySettings');
+    } catch (e) {
+      logWarning('Could not open battery settings', e);
+      if (!mounted) return;
+      AppToast.error(
+        context,
+        'تعذّر فتح الإعدادات',
+        detail: 'افتح إعدادات النظام ← البطارية ← استثناء التطبيقات',
+      );
+    }
+  }
+
   /// Opens Android battery optimization settings for this app
   /// This helps users disable battery restrictions that delay notifications
   void _openBatteryOptimizationSettings() async {
@@ -551,7 +880,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            backgroundColor: AppColors.sheetTop,
+            backgroundColor: AppColors.sheetBottom,
             surfaceTintColor: Colors.transparent,
             shape: _dialogShape,
             title: const Text(
@@ -591,26 +920,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 onPressed: () => Navigator.pop(context),
                 child: const Text(
                   'إلغاء',
-                  style: TextStyle(
-                    color: AppColors.label,
-                    fontFamily: 'cairo',
-                  ),
+                  style: TextStyle(color: AppColors.label, fontFamily: 'cairo'),
                 ),
               ),
               ElevatedButton(
-                onPressed: () async {
+                onPressed: () {
                   Navigator.pop(context);
-                  // Open battery optimization settings using native channel
-                  try {
-                    const channel = MethodChannel('com.myadhan/notification');
-                    await channel.invokeMethod('openBatterySettings');
-                  } catch (e) {
-                    // Fallback: open general Android settings
-                    final uri = Uri.parse('package:com.example.myadhan');
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri);
-                    }
-                  }
+                  _openBatterySettings();
                 },
                 style: ElevatedButton.styleFrom(
                   // Near-white fill with dark text, matching the primary
@@ -663,6 +979,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     {'id': 23, 'name': 'الأردن', 'nameEn': 'Jordan'},
   ];
 
+  /// Persists the chosen method, waits for the times it produces, and only
+  /// then re-arms the alarms.
+  ///
+  /// The old flow fired `fetchPrayerTimes()` without awaiting it and read the
+  /// provider on the very next line — so it re-armed five alarms from the
+  /// *previous* method's times while the new ones were still in flight, and
+  /// the alarms only became correct on some later refresh. It also announced
+  /// success before anything had actually been recalculated.
+  Future<void> _applyCalculationMethod(
+    SharedPreferences prefs,
+    int method,
+  ) async {
+    await prefs.setInt('calculation_method', method);
+
+    final notifier = ref.read(prayerTimesProvider.notifier);
+    await notifier.fetchPrayerTimes();
+
+    final data = ref.read(prayerTimesProvider).value;
+    if (data != null) {
+      await PrayerAlarmScheduler.scheduleAllPrayersWithData(data);
+    }
+
+    if (!mounted) return;
+    final methodName =
+        _calculationMethods.firstWhere(
+              (m) => m['id'] == method,
+              orElse: () => _calculationMethods.first,
+            )['name']
+            as String;
+
+    if (data == null) {
+      AppToast.error(
+        context,
+        'تم حفظ طريقة الحساب',
+        detail: 'تعذّر تحديث المواقيت الآن — سيُعاد المحاولة تلقائيًا',
+      );
+      return;
+    }
+
+    AppToast.success(
+      context,
+      'تم تغيير طريقة الحساب',
+      detail: 'حُسبت المواقيت حسب «$methodName»',
+    );
+  }
+
   void _showCalculationMethodDialog() async {
     final prefs = await SharedPreferences.getInstance();
     int currentMethod = prefs.getInt('calculation_method') ?? 19;
@@ -674,7 +1036,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           (context) => StatefulBuilder(
             builder:
                 (context, setDialogState) => AlertDialog(
-                  backgroundColor: AppColors.sheetTop,
+                  backgroundColor: AppColors.sheetBottom,
                   surfaceTintColor: Colors.transparent,
                   shape: _dialogShape,
                   title: const Text(
@@ -780,25 +1142,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     ElevatedButton(
                       onPressed: () async {
-                        await prefs.setInt('calculation_method', currentMethod);
-                        if (context.mounted) Navigator.pop(context);
-
-                        // Refresh prayer times with new method
-                        ref
-                            .read(prayerTimesProvider.notifier)
-                            .fetchPrayerTimes();
-
-                        // Reschedule alarms after prayer provider updates
-                        final prayerTimesAsync = ref.read(prayerTimesProvider);
-                        if (prayerTimesAsync.hasValue) {
-                          await PrayerAlarmScheduler.scheduleAllPrayersWithData(
-                            prayerTimesAsync.value!,
-                          );
-                        }
-
-                        if (mounted) {
-                          _showSnack('تم تغيير طريقة الحساب ✅');
-                        }
+                        final selected = currentMethod;
+                        Navigator.pop(context);
+                        await _applyCalculationMethod(prefs, selected);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.body,
@@ -821,5 +1167,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
           ),
     );
+  }
+}
+
+/// One prayer's scheduling state, as read back from the prefs the native
+/// alarm scheduler actually uses.
+class _AlarmStatus {
+  final String time;
+  final bool enabled;
+  final bool isTomorrow;
+  final bool scheduled;
+
+  const _AlarmStatus({
+    required this.time,
+    required this.enabled,
+    required this.isTomorrow,
+    required this.scheduled,
+  });
+
+  String get label {
+    if (!enabled) return 'الأذان متوقف';
+    if (!scheduled) return 'غير مجدول';
+    return isTomorrow ? 'غدًا $time' : 'اليوم $time';
+  }
+
+  Color get color {
+    if (!enabled) return AppColors.faint;
+    if (!scheduled) return AppColors.danger;
+    return isTomorrow ? AppColors.warning : AppColors.success;
   }
 }

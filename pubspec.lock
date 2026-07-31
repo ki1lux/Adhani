@@ -145,6 +145,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
+  connectivity_plus:
+    dependency: "direct main"
+    description:
+      name: connectivity_plus
+      sha256: b5e72753cf63becce2c61fd04dfe0f1c430cc5278b53a1342dc5ad839eab29ec
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.1.5"
+  connectivity_plus_platform_interface:
+    dependency: transitive
+    description:
+      name: connectivity_plus_platform_interface
+      sha256: "3c09627c536d22fd24691a905cdd8b14520de69da52c7a97499c8be5284a32ed"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.0"
   crypto:
     dependency: transitive
     description:
@@ -222,6 +238,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.14.4"
+  flutter_lints:
+    dependency: "direct dev"
+    description:
+      name: flutter_lints
+      sha256: "5398f14efa795ffb7a33e9b6a08798b26a180edac4ad7db3f231e40f82ce11e1"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.0.0"
   flutter_local_notifications:
     dependency: "direct main"
     description:
@@ -254,6 +278,11 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.2"
+  flutter_localizations:
+    dependency: "direct main"
+    description: flutter
+    source: sdk
+    version: "0.0.0"
   flutter_native_splash:
     dependency: "direct dev"
     description:
@@ -464,6 +493,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.2"
+  lints:
+    dependency: transitive
+    description:
+      name: lints
+      sha256: c35bb79562d980e9a453fc715854e1ed39e24e7d0297a880ef54e17f9874a9d7
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.1.1"
   logging:
     dependency: transitive
     description:
@@ -504,6 +541,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.17.5"
+  nm:
+    dependency: transitive
+    description:
+      name: nm
+      sha256: "2c9aae4127bdc8993206464fcc063611e0e36e72018696cd9631023a31b24254"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.0"
   objective_c:
     dependency: transitive
     description:

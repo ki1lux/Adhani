@@ -1,30 +1,111 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myadhan/services/app_config.dart';
+import 'package:myadhan/services/local_timezone.dart';
+import 'package:myadhan/view/AppToast.dart';
+import 'package:myadhan/view/OfflineBanner.dart';
+import 'package:timezone/timezone.dart' as tz;
 
-import 'package:myadhan/main.dart';
-
+/// This file shipped as the unmodified `flutter create` counter template: it
+/// pumped `MyApp()`, looked for a '0', and tapped an `Icons.add` that has
+/// never existed in this app. `flutter test` therefore failed on a clean
+/// checkout, which is why nothing in the project ran it.
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('LocalTimezone', () {
+    test('resolves tz.local to a zone matching the device offset', () {
+      LocalTimezone.configure();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      final now = DateTime.now();
+      final resolved = tz.TZDateTime.from(now, tz.local);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+      // The whole point of the fix: whatever zone we land on must agree with
+      // the device about what time it is. Pinning Africa/Algiers, as the app
+      // used to, fails this on every device outside UTC+1.
+      expect(
+        resolved.timeZoneOffset,
+        now.timeZoneOffset,
+        reason:
+            'tz.local (${tz.local.name}) disagrees with the device offset — '
+            'every scheduled reminder would fire at the wrong time',
+      );
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('is idempotent', () {
+      LocalTimezone.configure();
+      final first = tz.local.name;
+      LocalTimezone.configure();
+      expect(tz.local.name, first);
+    });
   });
+
+  group('AppConfig', () {
+    test('store URLs are built from the real application id', () {
+      // A mismatch here ships a "rate this app" row that opens a Play page for
+      // an app that doesn't exist.
+      expect(AppConfig.packageName, 'com.ki1lux.adhani');
+      expect(AppConfig.playStoreUrl, contains(AppConfig.packageName));
+      expect(AppConfig.playStoreMarketUri, contains(AppConfig.packageName));
+      expect(AppConfig.packageName, isNot(contains('com.example')));
+    });
+
+    test('privacy policy URL is absolute and https', () {
+      final uri = Uri.parse(AppConfig.privacyPolicyUrl);
+      expect(uri.hasScheme, isTrue);
+      expect(uri.scheme, 'https');
+    });
+  });
+
+  group('OfflineBanner', () {
+    testWidgets('stays out of the way when the data is fresh', (tester) async {
+      await tester.pumpWidget(
+        const _TestHarness(child: Scaffold(body: OfflineBanner())),
+      );
+      await tester.pump();
+
+      expect(find.text('وضع دون اتصال'), findsNothing);
+      expect(find.text('المواقيت قد لا تكون محدّثة'), findsNothing);
+    });
+  });
+
+  group('AppToast', () {
+    testWidgets('shows a message and replaces the previous one', (tester) async {
+      late BuildContext ctx;
+      await tester.pumpWidget(
+        _TestHarness(
+          child: Scaffold(
+            body: Builder(
+              builder: (context) {
+                ctx = context;
+                return const SizedBox.expand();
+              },
+            ),
+          ),
+        ),
+      );
+
+      AppToast.success(ctx, 'تم الحفظ');
+      await tester.pump();
+      expect(find.text('تم الحفظ'), findsOneWidget);
+
+      // Replace rather than queue — the toast is a confirmation, and three
+      // stacked confirmations for one action is noise.
+      AppToast.success(ctx, 'تم التحديث');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('تم الحفظ'), findsNothing);
+      expect(find.text('تم التحديث'), findsOneWidget);
+    });
+  });
+}
+
+/// The minimum app shell the widgets under test need: a Riverpod scope (the
+/// offline banner reads a provider) inside a MaterialApp.
+class _TestHarness extends StatelessWidget {
+  final Widget child;
+  const _TestHarness({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ProviderScope(child: MaterialApp(home: child));
+  }
 }
