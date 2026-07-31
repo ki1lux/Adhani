@@ -128,7 +128,7 @@ that must stay in sync across both languages.
 ## Project Structure
 
 ```text
-Adhanuk/
+Adhani/
 ├── android/app/src/main/
 │   ├── kotlin/com/ki1lux/adhani/   # Native backend: services, receivers, workers, widget
 │   └── res/                        # Widget & notification layouts, Adhan audio, icons
@@ -165,8 +165,8 @@ Adhanuk/
 ### Run it
 
 ```bash
-git clone https://github.com/ki1lux/Adhanuk.git
-cd Adhanuk
+git clone https://github.com/ki1lux/Adhani.git
+cd Adhani
 flutter pub get
 flutter run
 ```

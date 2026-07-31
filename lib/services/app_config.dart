@@ -30,7 +30,7 @@ abstract final class AppConfig {
   /// as soon as the repo is public — no hosting to set up. Replace it if the
   /// policy moves to a custom domain.
   static const privacyPolicyUrl =
-      'https://github.com/ki1lux/Adhanuk/blob/main/PRIVACY_POLICY.md';
+      'https://github.com/ki1lux/Adhani/blob/main/PRIVACY_POLICY.md';
 
   static const supportEmail = 'khalilbenfiala001@gmail.com';
   static const developerUrl = 'https://github.com/ki1lux';
