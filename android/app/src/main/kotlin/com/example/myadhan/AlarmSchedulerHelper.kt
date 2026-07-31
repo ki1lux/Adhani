@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
+import java.util.Calendar
 
 /**
  * Shared helper for scheduling AlarmManager alarms from SharedPreferences.
@@ -22,6 +23,9 @@ object AlarmSchedulerHelper {
     // Request codes 101..105 — kept separate from the adhan alarm codes (1..5, 999)
     // so cancelling/rescheduling one doesn't clobber the other.
     private const val WIDGET_REFRESH_ID_OFFSET = 100
+
+    /** Bound on the re-derivation search in [nextOccurrence]. */
+    private const val LOOKAHEAD_DAYS = 3
 
     /**
      * Schedule a single prayer alarm using AlarmManager.setAlarmClock().
@@ -172,15 +176,19 @@ object AlarmSchedulerHelper {
                 continue
             }
 
-            // If the trigger time has passed, compute next day's trigger
+            // If the trigger time has passed, re-derive the next occurrence.
             var actualTrigger = triggerMillis
             if (actualTrigger <= now) {
-                // Add 24 hours to get tomorrow's prayer time
-                actualTrigger += 24 * 60 * 60 * 1000L
+                actualTrigger = nextOccurrence(context, prefs, prayerId, now)
+
+                if (actualTrigger <= now) {
+                    Log.w(TAG, "Prayer $prayerId ($name): could not resolve a future trigger")
+                    continue
+                }
 
                 // Update SharedPrefs with the new trigger time
                 prefs.edit().putLong("flutter.prayer_${prayerId}_trigger_millis", actualTrigger).apply()
-                Log.d(TAG, "Prayer $prayerId ($name): trigger was in past, moved to tomorrow")
+                Log.d(TAG, "Prayer $prayerId ($name): trigger was in past, re-derived to $actualTrigger")
             }
 
             // Always refresh the widget exactly at this prayer's time, regardless of
@@ -207,5 +215,67 @@ object AlarmSchedulerHelper {
         val intent = Intent("com.example.myadhan.ACTION_PRAYER_UPDATED")
         intent.setPackage(context.packageName)
         context.sendBroadcast(intent)
+    }
+
+    /**
+     * Works out when prayer [prayerId] next occurs, for a trigger that has
+     * already passed.
+     *
+     * This replaces a bare `trigger += 24h`, which was wrong three ways:
+     * it only ever advanced by one day (so a device three days stale resolved
+     * to a time still in the past, and [scheduleAlarm] silently dropped it —
+     * meaning a reboot armed *zero* alarms); it shifted by an hour across a DST
+     * boundary while the displayed `prayer_{id}_time` string didn't, so the
+     * adhan disagreed with the widget; and it froze the astronomical drift of
+     * ~1-2 minutes a day at whatever it was on the day of the last fetch.
+     *
+     * Preference order: the month cache knows the correct time for each
+     * specific date, so it fixes the drift too. Failing that, re-parse the
+     * stored `HH:mm` onto today's calendar — the same self-healing trick
+     * [PrayerWidgetProvider] already uses — which at least gets the wall-clock
+     * time and DST right.
+     */
+    private fun nextOccurrence(
+        context: Context,
+        prefs: SharedPreferences,
+        prayerId: Int,
+        now: Long
+    ): Long {
+        val cache = PrayerMonthCache.read(prefs)
+
+        // Look ahead a bounded number of days rather than looping forever on a
+        // malformed time string.
+        for (dayOffset in 0..LOOKAHEAD_DAYS) {
+            val candidate = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, dayOffset)
+            }
+
+            val timeStr = cache?.dayFor(candidate.time)?.timeForId(prayerId)
+                ?: prefs.getString("flutter.prayer_${prayerId}_time", null)
+                ?: return 0L
+
+            val parts = timeStr.split(" ")[0].split(":")
+            if (parts.size != 2) return 0L
+            val hour = parts[0].toIntOrNull() ?: return 0L
+            val minute = parts[1].toIntOrNull() ?: return 0L
+
+            candidate.set(Calendar.HOUR_OF_DAY, hour)
+            candidate.set(Calendar.MINUTE, minute)
+            candidate.set(Calendar.SECOND, 0)
+            candidate.set(Calendar.MILLISECOND, 0)
+
+            if (candidate.timeInMillis > now) {
+                // Keep the displayed time in step with the alarm we just armed.
+                if (cache?.dayFor(candidate.time) != null) {
+                    prefs.edit()
+                        .putString("flutter.prayer_${prayerId}_time", timeStr)
+                        .apply()
+                }
+                return candidate.timeInMillis
+            }
+        }
+
+        Log.w(TAG, "No future occurrence for prayer $prayerId within $LOOKAHEAD_DAYS days")
+        return 0L
     }
 }

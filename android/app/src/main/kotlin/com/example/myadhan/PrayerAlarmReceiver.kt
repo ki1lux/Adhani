@@ -24,7 +24,22 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         
         val prayerId = intent.getIntExtra(EXTRA_PRAYER_ID, 0)
         Log.d(TAG, "Prayer ID: $prayerId")
-        
+
+        // Re-arm immediately, before anything else can fail or return early.
+        //
+        // AlarmManager alarms are one-shot. Nothing here used to re-arm them,
+        // so the five alarms set for a given day were simply consumed by it —
+        // and with the daily worker unable to run offline, the second offline
+        // day had no alarms at all and the adhan went silent. Rescheduling from
+        // prefs on every fire means the alarms perpetuate themselves with no
+        // network and no daily job. It covers all five prayers, so it must run
+        // before the per-prayer `isEnabled` early-return below.
+        try {
+            AlarmSchedulerHelper.rescheduleAllFromPrefs(context)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to re-arm alarms: ${e.message}")
+        }
+
         // Get prayer info from SharedPreferences (Flutter stores with 'flutter.' prefix)
         val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val prayerName = prefs.getString("flutter.prayer_${prayerId}_name", "الصلاة") ?: "الصلاة"

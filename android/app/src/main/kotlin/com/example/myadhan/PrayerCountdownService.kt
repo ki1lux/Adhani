@@ -39,6 +39,16 @@ class PrayerCountdownService : Service() {
         private const val CHANNEL_ID = "prayer_countdown_channel"
         private const val NOTIFICATION_ID = 2001
         private const val TICK_INTERVAL_MS = 1_000L // 1 second updates ALWAYS
+
+        /**
+         * How long to wait before re-attempting a day rollover that didn't
+         * resolve. The tick is 1s, so without this an offline device would
+         * hammer the API once a second for the rest of the day.
+         */
+        private const val ROLLOVER_RETRY_INTERVAL_MS = 5 * 60 * 1000L
+
+        /** Bound on the roll-forward search in [findNextPrayer]. */
+        private const val MAX_ROLL_FORWARD_DAYS = 400
         private const val PREFS_NAME = "FlutterSharedPreferences"
 
         /**
@@ -71,6 +81,19 @@ class PrayerCountdownService : Service() {
     
     @Volatile
     private var midnightRefreshInProgress = false // Flag while fetching new data at midnight
+
+    /// The day a refresh is currently trying to resolve. Only promoted to
+    /// [lastTrackedDate] once that refresh actually succeeds — otherwise a
+    /// failed attempt would consume the day's one and only rollover trigger.
+    @Volatile
+    private var pendingTrackedDate: String = ""
+
+    @Volatile
+    private var rolloverResolved = false
+
+    /// Stops a failed rollover from re-firing on every 1s tick.
+    @Volatile
+    private var lastRolloverAttemptMs: Long = 0L
 
     private val updateRunnable = object : Runnable {
         override fun run() {
@@ -150,7 +173,25 @@ class PrayerCountdownService : Service() {
                 }
 
                 val method = prefs.getInt("flutter.calculation_method", 19)
-                val response = AladhanApiClient.fetchPrayerTimes(lat, lng, method = method, date = targetDate)
+
+                // Try the cache before the network. On a device that fetched a
+                // month while online, the day we need is already here and the
+                // rollover completes instantly with no request at all.
+                val resolvedDate = targetDate ?: java.util.Date()
+                val cachedDay = PrayerMonthCache.read(prefs)?.dayFor(resolvedDate)
+                val response = if (cachedDay != null) {
+                    Log.d(TAG, "Rollover satisfied from month cache")
+                    AladhanApiClient.PrayerTimesResponse(
+                        fajr = cachedDay.fajr,
+                        dhuhr = cachedDay.dhuhr,
+                        asr = cachedDay.asr,
+                        maghrib = cachedDay.maghrib,
+                        isha = cachedDay.isha,
+                        hijriDate = cachedDay.hijri
+                    )
+                } else {
+                    AladhanApiClient.fetchPrayerTimes(lat, lng, method = method, date = targetDate)
+                }
 
                 if (response != null) {
                     val editor = prefs.edit()
@@ -212,23 +253,37 @@ class PrayerCountdownService : Service() {
                     editor.apply()
                     Log.d(TAG, "Direct update: Saved new prayer times and Hijri date.")
 
-                    // Reschedule Native Alarms IMMEDIATELY
-                    AlarmSchedulerHelper.rescheduleAllFromPrefs(this@PrayerCountdownService)
-
-                    // Also enqueue the full worker as backup
-                    try {
-                        val fullUpdate = OneTimeWorkRequestBuilder<PrayerUpdateWorker>().build()
-                        WorkManager.getInstance(this@PrayerCountdownService).enqueue(fullUpdate)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to enqueue full update worker: ${e.message}")
-                    }
+                    rolloverResolved = true
                 } else {
-                    Log.w(TAG, "API fetch failed at midnight")
+                    Log.w(TAG, "No cached day and API fetch failed at midnight")
+                }
+
+                // Re-arm regardless of which branch we took. On failure this is
+                // what keeps the notification moving: AlarmSchedulerHelper
+                // re-derives each prayer's next occurrence from the cache or
+                // the stored HH:mm, so a failed rollover degrades to yesterday's
+                // schedule instead of freezing on "حان وقت صلاة الفجر" forever.
+                AlarmSchedulerHelper.rescheduleAllFromPrefs(this@PrayerCountdownService)
+
+                // The backup worker used to be enqueued only on success — the
+                // one case that didn't need a backup. It belongs here.
+                try {
+                    val fullUpdate = OneTimeWorkRequestBuilder<PrayerUpdateWorker>().build()
+                    WorkManager.getInstance(this@PrayerCountdownService).enqueue(fullUpdate)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to enqueue full update worker: ${e.message}")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Midnight fetch error: ${e.message}")
             } finally {
                 midnightRefreshInProgress = false
+                // Only bank the day once we actually resolved it. Marking it
+                // done on failure consumed the rollover, so the day's single
+                // refresh attempt was spent and never retried.
+                if (rolloverResolved) {
+                    lastTrackedDate = pendingTrackedDate
+                }
+                pendingTrackedDate = ""
                 // Trigger an immediate notification update on main thread
                 handler.post { updateRunnable.run() }
             }
@@ -293,23 +348,56 @@ class PrayerCountdownService : Service() {
 
         val targetDayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(nowCal.time)
 
-        if (lastTrackedDate.isNotEmpty() && targetDayStr != lastTrackedDate) {
-            Log.d(TAG, "🌙 Shifted to new reporting day: $targetDayStr")
+        val monthCache = PrayerMonthCache.read(prefs)
+
+        // Does the data on disk actually describe the day we're reporting on?
+        // A fresh service instance used to assume it did — lastTrackedDate is
+        // reset to "" in onCreate, so the first tick simply adopted whatever
+        // the current reporting day was. Any restart between Isha+35m and
+        // midnight (Android restarts foreground services routinely) therefore
+        // swallowed that day's rollover entirely, leaving the 00:05 worker as
+        // the only thing that would ever refresh the data.
+        val dataCoversReportingDay = monthCache?.dayFor(nowCal.time) != null
+
+        val needsRollover = if (lastTrackedDate.isEmpty()) {
             lastTrackedDate = targetDayStr
-            
-            // Refresh the persistent notification's system timestamp so it doesn't get stuck
-            cachedBuilder?.setWhen(System.currentTimeMillis())
-            cachedBuilder?.setShowWhen(true)
-            
-            fetchFreshDataDirectly(targetDate)
+            !dataCoversReportingDay
+        } else {
+            targetDayStr != lastTrackedDate
         }
-        lastTrackedDate = targetDayStr
+
+        if (needsRollover) {
+            // Retry a failed rollover, but not on every one-second tick.
+            val sinceLastAttempt = System.currentTimeMillis() - lastRolloverAttemptMs
+            if (sinceLastAttempt >= ROLLOVER_RETRY_INTERVAL_MS) {
+                Log.d(TAG, "🌙 Shifted to new reporting day: $targetDayStr")
+                lastRolloverAttemptMs = System.currentTimeMillis()
+
+                // Refresh the persistent notification's system timestamp so it doesn't get stuck
+                cachedBuilder?.setWhen(System.currentTimeMillis())
+                cachedBuilder?.setShowWhen(true)
+
+                // lastTrackedDate is advanced by the fetch itself, and only if
+                // it succeeds — see fetchFreshDataDirectly's finally block.
+                pendingTrackedDate = targetDayStr
+                rolloverResolved = false
+                fetchFreshDataDirectly(targetDate)
+            }
+        }
 
         val nextPrayer = findNextPrayer(now)
 
-        // Line 1: City + Hijri date
+        // Line 1: City + Hijri date.
+        //
+        // Resolved from the cache on every tick rather than read from the
+        // stored `cached_hijri_date` string, so the date turns over exactly at
+        // Maghrib — when the Islamic day actually begins — instead of whenever
+        // something last happened to write that key. The stored value remains
+        // the fallback for installs whose cache hasn't been filled yet.
         val city = prefs.getString("flutter.city_name", null) ?: ""
-        val hijri = prefs.getString("flutter.cached_hijri_date", null) ?: ""
+        val hijri = monthCache?.hijriNow()
+            ?: prefs.getString("flutter.cached_hijri_date", null)
+            ?: ""
         val title = when {
             city.isNotEmpty() && hijri.isNotEmpty() -> "$city • $hijri"
             city.isNotEmpty() -> city
@@ -491,10 +579,23 @@ class PrayerCountdownService : Service() {
         // If there's a future prayer today, return it
         if (closestFuture != null) return closestFuture
         
-        // If NO prayers are left today (e.g. Isha finished running in complete background), 
-        // fallback to tomorrow's Fajr by implicitly adding 24 hours to today's earliest prayer.
+        // If NO prayers are left today (e.g. Isha finished running in complete background),
+        // fall back to tomorrow's Fajr by rolling today's earliest prayer forward.
+        //
+        // This has to be a loop. A single +24h assumes the stored triggers are
+        // at most one day stale — on a device that has been offline longer, the
+        // result was *still* in the past, so remainingMs stayed negative and the
+        // notification froze on "حان وقت صلاة الفجر" permanently.
         if (earliestToday != null) {
-            return NextPrayer(earliestToday.id, earliestToday.name, earliestToday.triggerMillis + 24 * 60 * 60 * 1000L)
+            var rolled = earliestToday.triggerMillis
+            var guard = 0
+            while (rolled <= now && guard < MAX_ROLL_FORWARD_DAYS) {
+                rolled += 24 * 60 * 60 * 1000L
+                guard++
+            }
+            if (rolled > now) {
+                return NextPrayer(earliestToday.id, earliestToday.name, rolled)
+            }
         }
 
         return null

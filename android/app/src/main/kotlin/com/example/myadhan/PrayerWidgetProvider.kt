@@ -75,6 +75,28 @@ class PrayerWidgetProvider : AppWidgetProvider() {
         /** Fallback timeline width when the host reports nothing usable. */
         private const val DEFAULT_WIDTH_DP = 320
 
+        /// Shown on the date line once the times are old enough to be visibly
+        /// wrong. Deliberately terse — the widget has one line to spare.
+        private const val STALE_MARKER = "غير محدّث"
+
+        /// Prayer times drift roughly a minute or two a day, so three days is
+        /// where "close enough" stops being true.
+        private const val STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000L
+
+        /// True when the last successful write of prayer data is old enough
+        /// that the displayed times can no longer be trusted.
+        private fun isStale(prefs: android.content.SharedPreferences): Boolean {
+            val raw = prefs.getString("flutter.last_prayer_update", null) ?: return false
+            return try {
+                val parsed = java.text.SimpleDateFormat(
+                    "yyyy-MM-dd'T'HH:mm:ss.SSS", java.util.Locale.US
+                ).parse(raw) ?: return false
+                System.currentTimeMillis() - parsed.time > STALE_AFTER_MS
+            } catch (e: Exception) {
+                false
+            }
+        }
+
         /// Parses an "HH:mm" prayer time into today's epoch millis.
         private fun todayMillisFor(time: String): Long? {
             val parts = time.split(":")
@@ -234,10 +256,19 @@ class PrayerWidgetProvider : AppWidgetProvider() {
             // so it looked like it hadn't happened yet today.
             val passedToday = BooleanArray(6)
 
+            // The month cache knows each specific date's times, so it corrects
+            // the ~1-2 min/day astronomical drift that the stored HH:mm string
+            // freezes in place. Falls back to the prefs when it can't answer —
+            // which is what every install has before its first month fetch.
+            val monthCache = PrayerMonthCache.read(prefs)
+            val cachedToday = monthCache?.dayFor(java.util.Date())
+
             // 1. Read all 5 prayers, populate text, and find the NEXT prayer
             for (i in 1..5) {
                 val name = prefs.getString("flutter.prayer_${i}_name", null)
-                val time = prefs.getString("flutter.prayer_${i}_time", "--:--") ?: "--:--"
+                val time = cachedToday?.timeForId(i)
+                    ?: prefs.getString("flutter.prayer_${i}_time", "--:--")
+                    ?: "--:--"
 
                 // Parse the time string directly instead of relying on the alarm trigger_millis
                 // because the alarm trigger_millis might not be updated if the user disabled the Adhan for this prayer.
@@ -347,13 +378,29 @@ class PrayerWidgetProvider : AppWidgetProvider() {
             // 4. City + Hijri date line — same cached keys and "•" join
             // PrayerCountdownService's notification title already uses.
             val city = prefs.getString("flutter.city_name", null) ?: ""
-            val hijri = prefs.getString("flutter.cached_hijri_date", null) ?: ""
-            val dateLine = when {
+            // Resolved from the cache, and Maghrib-aware: the Islamic day
+            // begins at sunset, so after Maghrib this is already the next
+            // Gregorian day's Hijri value. `cached_hijri_date` is a single
+            // stored string that only changed when something wrote it, so it
+            // showed the date of whenever the last successful fetch happened.
+            val hijri = monthCache?.hijriNow()
+                ?: prefs.getString("flutter.cached_hijri_date", null)
+                ?: ""
+            var dateLine = when {
                 city.isNotEmpty() && hijri.isNotEmpty() -> "$city • $hijri"
                 city.isNotEmpty() -> city
                 hijri.isNotEmpty() -> hijri
                 else -> ""
             }
+
+            // Say so when the data is old enough that the times on the widget
+            // have visibly drifted. `flutter.last_prayer_update` has been
+            // written by two different code paths all along and read by none of
+            // them, so a month-old table rendered exactly like a fresh one.
+            if (cachedToday == null && isStale(prefs)) {
+                dateLine = if (dateLine.isEmpty()) STALE_MARKER else "$dateLine • $STALE_MARKER"
+            }
+
             views.setTextViewText(R.id.widget_date_line, dateLine)
 
             // Instruct the widget manager to update the widget
