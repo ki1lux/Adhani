@@ -92,6 +92,20 @@
             </intent-filter>
         </receiver>
 
+        <!-- Prayer triggers are absolute epoch instants derived from a local
+             HH:mm, so a timezone or clock change invalidates all five without
+             making any of them look invalid. Must be exported: the system is
+             the sender. Neither action requires a permission. -->
+        <receiver
+            android:name=".TimeChangeReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+        </receiver>
+
         <!-- Fired by AlarmManager at each prayer time. Only this app ever
              sends to it, so it stays unexported. -->
         <receiver

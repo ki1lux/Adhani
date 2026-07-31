@@ -196,8 +196,19 @@ object AlarmSchedulerHelper {
      * - flutter.prayer_{id}_time → display time HH:mm (String)
      * - flutter.prayer_{id}_trigger_millis → epoch millis for next alarm (Long)
      * - flutter.adhan_enabled_{name} → whether adhan is enabled (Boolean)
+     *
+     * @param forceRederive recompute every trigger from its `HH:mm` string
+     *   rather than trusting the stored epoch value, even when that value is
+     *   still in the future.
+     *
+     *   Needed after a timezone or clock change. `trigger_millis` is an
+     *   absolute instant computed in the *old* zone, so after a flight it is
+     *   still comfortably "in the future" and would be honoured as-is — firing
+     *   the adhan at the wrong wall-clock time by exactly the offset
+     *   difference, silently, with the notification and widget still showing
+     *   the correct `HH:mm` next to it.
      */
-    fun rescheduleAllFromPrefs(context: Context) {
+    fun rescheduleAllFromPrefs(context: Context, forceRederive: Boolean = false) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         var scheduledCount = 0
@@ -228,19 +239,27 @@ object AlarmSchedulerHelper {
                 continue
             }
 
-            // If the trigger time has passed, re-derive the next occurrence.
+            // Re-derive when the trigger has passed, or when the caller tells
+            // us the stored instant can no longer be trusted (clock/zone move).
             var actualTrigger = triggerMillis
-            if (actualTrigger <= now) {
-                actualTrigger = nextOccurrence(cache, prefs, prayerId, now)
+            if (actualTrigger <= now || forceRederive) {
+                val rederived = nextOccurrence(cache, prefs, prayerId, now)
 
-                if (actualTrigger <= now) {
-                    Log.w(TAG, "Prayer $prayerId ($name): could not resolve a future trigger")
-                    continue
+                if (rederived <= now) {
+                    if (actualTrigger <= now) {
+                        Log.w(TAG, "Prayer $prayerId ($name): could not resolve a future trigger")
+                        continue
+                    }
+                    // Forced, but re-derivation failed — the stored trigger is
+                    // at least still in the future, so keep it rather than
+                    // dropping this prayer's alarm entirely.
+                    Log.w(TAG, "Prayer $prayerId ($name): re-derive failed, keeping stored trigger")
+                } else {
+                    actualTrigger = rederived
+                    // Update SharedPrefs with the new trigger time
+                    prefs.edit().putLong("flutter.prayer_${prayerId}_trigger_millis", actualTrigger).apply()
+                    Log.d(TAG, "Prayer $prayerId ($name): trigger re-derived to $actualTrigger")
                 }
-
-                // Update SharedPrefs with the new trigger time
-                prefs.edit().putLong("flutter.prayer_${prayerId}_trigger_millis", actualTrigger).apply()
-                Log.d(TAG, "Prayer $prayerId ($name): trigger was in past, re-derived to $actualTrigger")
             }
 
             // Always refresh the widget exactly at this prayer's time, regardless of
