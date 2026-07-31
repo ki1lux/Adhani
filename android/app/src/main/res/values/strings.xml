@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launcher label and widget picker label. Kept as resources rather than
+         hardcoded in the manifest so they can be localised per-locale later
+         without touching the manifest. -->
+    <string name="app_name">Adhani</string>
+    <string name="widget_label">Adhani — أوقات الصلاة</string>
+    <!-- Shown under the widget in the Android 12+ picker. Without it the
+         picker shows the label twice. -->
+    <string name="widget_description">مواقيت الصلاة والوقت المتبقي للصلاة القادمة</string>
+
+    <!-- Adaptive launcher icon background, referenced by
+         mipmap-anydpi-v26/launcher_icon.xml. Matches the splash background
+         in pubspec.yaml (flutter_native_splash.color). -->
+    <color name="ic_launcher_background">#0B1220</color>
+</resources>

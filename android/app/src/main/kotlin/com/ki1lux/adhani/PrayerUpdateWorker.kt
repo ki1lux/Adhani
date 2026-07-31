@@ -1,4 +1,4 @@
-package com.example.myadhan
+package com.ki1lux.adhani
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -319,7 +319,7 @@ class PrayerUpdateWorker(
     }
 
     private fun broadcastWidgetUpdate() {
-        val intent = android.content.Intent("com.example.myadhan.ACTION_PRAYER_UPDATED")
+        val intent = android.content.Intent("com.ki1lux.adhani.ACTION_PRAYER_UPDATED")
         intent.setPackage(applicationContext.packageName)
         applicationContext.sendBroadcast(intent)
     }

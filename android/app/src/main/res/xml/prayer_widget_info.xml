@@ -6,5 +6,7 @@
     android:targetCellHeight="2"
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/widget_prayer_times"
-    android:resizeMode="none"
+    android:description="@string/widget_description"
+    android:previewLayout="@layout/widget_prayer_times"
+    android:resizeMode="horizontal"
     android:widgetCategory="home_screen" />

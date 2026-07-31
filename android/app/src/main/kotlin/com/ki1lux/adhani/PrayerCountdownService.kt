@@ -1,4 +1,4 @@
-package com.example.myadhan
+package com.ki1lux.adhani
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -38,7 +38,30 @@ class PrayerCountdownService : Service() {
         private const val TAG = "PrayerCountdownService"
         private const val CHANNEL_ID = "prayer_countdown_channel"
         private const val NOTIFICATION_ID = 2001
-        private const val TICK_INTERVAL_MS = 1_000L // 1 second updates ALWAYS
+
+        /**
+         * Update cadence while the screen is on — the countdown is being
+         * looked at, so it has to move once a second.
+         */
+        private const val TICK_INTERVAL_AWAKE_MS = 1_000L
+
+        /**
+         * Update cadence while the screen is off.
+         *
+         * The service used to tick once a second unconditionally, which meant
+         * ~86,400 notification rebuilds a day, the overwhelming majority of
+         * them rendered to a screen nobody was looking at. Each one wakes the
+         * app process, allocates a Notification and round-trips to the system
+         * NotificationManager. Dropping to a minute while the screen is off
+         * cuts that by ~98% with nothing visible lost: the display is the only
+         * consumer of a per-second value, and [screenReceiver] snaps straight
+         * back to the awake cadence — with an immediate repaint — the instant
+         * the screen comes back on.
+         */
+        private const val TICK_INTERVAL_ASLEEP_MS = 60_000L
+
+        /** User-facing switch for this notification (written by the Dart settings screen). */
+        private const val KEY_COUNTDOWN_ENABLED = "flutter.countdown_notification_enabled"
 
         /**
          * How long to wait before re-attempting a day rollover that didn't
@@ -51,20 +74,32 @@ class PrayerCountdownService : Service() {
         private const val MAX_ROLL_FORWARD_DAYS = 400
         private const val PREFS_NAME = "FlutterSharedPreferences"
 
+        /** Whether the user wants the persistent countdown notification at all. */
+        fun isEnabled(context: Context): Boolean =
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_COUNTDOWN_ENABLED, true)
+
         /**
          * Static helper to start the countdown service from anywhere.
          * Called by BootReceiver, PrayerAlarmReceiver, and onTaskRemoved.
+         *
+         * Respects the user's preference: an ongoing foreground service the
+         * user has switched off must not come back on the next reboot, prayer
+         * alarm or daily worker run.
          */
         fun startIfNeeded(context: Context) {
+            if (!isEnabled(context)) {
+                Log.d(TAG, "Countdown notification disabled by user — not starting")
+                return
+            }
             try {
                 val intent = Intent(context, PrayerCountdownService::class.java)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent)
-                } else {
-                    context.startService(intent)
-                }
+                context.startForegroundService(intent)
                 Log.d(TAG, "Countdown service (re)started")
             } catch (e: Exception) {
+                // ForegroundServiceStartNotAllowedException on Android 12+ when
+                // the caller isn't in an exempt state (e.g. a WorkManager job).
+                // The next alarm or app launch will start it.
                 Log.e(TAG, "Failed to start countdown service: ${e.message}")
             }
         }
@@ -95,12 +130,33 @@ class PrayerCountdownService : Service() {
     @Volatile
     private var lastRolloverAttemptMs: Long = 0L
 
+    /** Drives the tick cadence — see [TICK_INTERVAL_ASLEEP_MS]. */
+    @Volatile
+    private var screenOn = true
+
     private val updateRunnable = object : Runnable {
         override fun run() {
             updateNotification()
             // Pro-tip #1: Use postAtTime with uptimeMillis for Doze resilience
-            val nextTick = SystemClock.uptimeMillis() + TICK_INTERVAL_MS
-            handler.postAtTime(this, nextTick)
+            val interval = if (screenOn) TICK_INTERVAL_AWAKE_MS else TICK_INTERVAL_ASLEEP_MS
+            handler.postAtTime(this, SystemClock.uptimeMillis() + interval)
+        }
+    }
+
+    /**
+     * Keeps [screenOn] honest. Screen on/off can only be observed from a
+     * dynamically registered receiver — the system refuses to deliver these to
+     * a manifest-declared one.
+     */
+    private val screenReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val nowOn = intent.action == Intent.ACTION_SCREEN_ON
+            if (nowOn == screenOn) return
+            screenOn = nowOn
+            // Re-anchor the loop so waking the device gives an up-to-date
+            // countdown immediately rather than up to a minute later.
+            handler.removeCallbacks(updateRunnable)
+            handler.post(updateRunnable)
         }
     }
 
@@ -110,21 +166,41 @@ class PrayerCountdownService : Service() {
         // Initialize as empty so the first tick sets it correctly based on the current time vs Isha
         lastTrackedDate = ""
         createNotificationChannel()
+
+        screenOn = (getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isInteractive
+        val screenFilter = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenReceiver, screenFilter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(screenReceiver, screenFilter)
+        }
+
         Log.d(TAG, "Service created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service started")
 
+        // The user can switch this notification off. Honour that even if
+        // something still holds a stale start intent.
+        if (!isEnabled(this)) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         // Build initial notification
         val notification = buildInitialNotification()
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification,
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start foreground: ${e.message}")
             stopSelf()
@@ -141,6 +217,11 @@ class PrayerCountdownService : Service() {
     override fun onDestroy() {
         Log.d(TAG, "Service destroyed")
         handler.removeCallbacks(updateRunnable)
+        try {
+            unregisterReceiver(screenReceiver)
+        } catch (e: Exception) {
+            // Never registered, or already gone.
+        }
         super.onDestroy()
     }
 
@@ -428,8 +509,8 @@ class PrayerCountdownService : Service() {
                     val minutes = totalSeconds / 60
                     val seconds = totalSeconds % 60
 
-                    val formattedMinutes = String.format("%02d", minutes)
-                    val formattedSeconds = String.format("%02d", seconds)
+                    val formattedMinutes = String.format(Locale.US, "%02d", minutes)
+                    val formattedSeconds = String.format(Locale.US, "%02d", seconds)
 
                     val iqamaCountdownStr = if (minutes > 0) {
                         "$formattedMinutes:$formattedSeconds+" // Changed format to minutes:seconds
@@ -450,9 +531,9 @@ class PrayerCountdownService : Service() {
                 val minutes = (totalSeconds % 3600) / 60
                 val seconds = totalSeconds % 60
 
-                val formattedHours = String.format("%02d", hours)
-                val formattedMinutes = String.format("%02d", minutes)
-                val formattedSeconds = String.format("%02d", seconds)
+                val formattedHours = String.format(Locale.US, "%02d", hours)
+                val formattedMinutes = String.format(Locale.US, "%02d", minutes)
+                val formattedSeconds = String.format(Locale.US, "%02d", seconds)
 
                 val countdownStr = when {
                     hours > 0 -> "$formattedHours:$formattedMinutes:$formattedSeconds"

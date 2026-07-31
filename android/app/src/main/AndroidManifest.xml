@@ -1,35 +1,63 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Permissions -->
+    <!-- ── Permissions ──────────────────────────────────────────────────
+         Every permission below is exercised by code in this app. Anything
+         that wasn't (ACCESS_BACKGROUND_LOCATION, USE_FULL_SCREEN_INTENT,
+         ACCESS_NOTIFICATION_POLICY) has been removed: Play requires a
+         declaration + justification for each of those, and an unused
+         permission is a rejection waiting to happen.
+    -->
+
+    <!-- Location: prayer times and the Qibla bearing are both computed from
+         the user's coordinates. Foreground use only — the app never reads
+         location while backgrounded. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- Aladhan API (prayer times) + Nominatim (place names). -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Alarms: the Adhan must sound at the exact minute, so an inexact
+         alarm is not a substitute. The app degrades to an inexact alarm
+         when the user declines this (see AlarmSchedulerHelper). -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Android 13+ runtime notification permission. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.VIBRATE"/>
-    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
-
-    <!-- Foreground Service Permissions -->
+    <!-- Foreground services: Adhan playback (mediaPlayback) and the live
+         countdown notification (specialUse — declared in Play Console). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
-    <!-- Feature -->
-    <uses-feature android:name="android.hardware.sensor.compass" android:required="true"/>
+    <!-- ── Hardware ─────────────────────────────────────────────────────
+         All optional. A device with no compass still gets prayer times,
+         alarms and the widget — QiblaScreen already renders an explanatory
+         state for it — so requiring the sensor would exclude those users
+         from the Play listing for no reason.
+    -->
+    <uses-feature
+        android:name="android.hardware.sensor.compass"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.location"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
 
     <application
-        android:exported="true"
-        android:label="Adhani"
+        android:label="@string/app_name"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
-
-        <uses-library android:name="org.apache.http.legacy" android:required="false"/>
-
+        android:icon="@mipmap/launcher_icon"
+        android:roundIcon="@mipmap/launcher_icon"
+        android:supportsRtl="true"
+        android:allowBackup="false">
 
         <!-- Main Activity -->
         <activity
@@ -45,96 +73,76 @@
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-            <receiver
-        android:exported="false"
-        android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
-    <receiver
-        android:exported="false"
-        android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
-        <intent-filter>
-            <action android:name="android.intent.action.BOOT_COMPLETED"/>
-            <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
-            <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-            <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
-        </intent-filter>
-    </receiver>
-
-    <receiver
-        android:exported="true"
-        android:name="com.dexterous.flutterlocalnotifications.FlutterLocalNotificationsReceiver"/>
-
-
-        <!-- Boot Receiver — re-schedules prayer alarms after reboot or app update -->
+        <!-- Boot Receiver — re-schedules prayer alarms after reboot or app
+             update. Must be exported: the system is the sender. -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
-                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
-                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
 
-        <!-- Custom Prayer Alarm Receiver for full-screen Adhan -->
+        <!-- Fired by AlarmManager at each prayer time. Only this app ever
+             sends to it, so it stays unexported. -->
         <receiver
             android:name=".PrayerAlarmReceiver"
             android:enabled="true"
             android:exported="false" />
 
-        <!-- Foreground Services -->
+        <!-- ── Foreground services ──────────────────────────────────────
+             AdhanAlarmService plays the Adhan on the alarm stream, so
+             mediaPlayback is the type that describes what it does.
+        -->
         <service
             android:name=".AdhanAlarmService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <!-- The live countdown to the next prayer. No standard FGS type
+             covers "a user-visible countdown that must stay accurate while
+             the app is closed", hence specialUse. The subtype below is what
+             the Play Console declaration must match. The user can turn this
+             notification off entirely in Settings. -->
         <service
             android:name=".PrayerCountdownService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="prayer_countdown_timer" />
+                android:value="Live countdown to the next prayer time, shown as an ongoing notification the user can disable in the app's settings." />
         </service>
 
-        <!-- Notification Channel Metadata -->
-        <meta-data
-            android:name="com.example.NOTIFICATION_CHANNEL_ID"
-            android:value="adhan_channel" />
-        <meta-data
-            android:name="com.example.NOTIFICATION_CHANNEL_NAME"
-            android:value="Adhan Notifications" />
-        <meta-data
-            android:name="com.example.NOTIFICATION_CHANNEL_DESC"
-            android:value="Shows countdown and Adhan alerts" />
-
-        <!-- Flutter Metadata -->
-        
-        <!-- Home Screen Widget Receiver -->
+        <!-- Home Screen Widget. Exported because the launcher binds it. -->
         <receiver
             android:name=".PrayerWidgetProvider"
             android:exported="true"
-            android:label="Prayer Times Widget">
+            android:label="@string/widget_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.example.myadhan.ACTION_PRAYER_UPDATED" />
+                <action android:name="com.ki1lux.adhani.ACTION_PRAYER_UPDATED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/prayer_widget_info" />
         </receiver>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
 
-    <!-- Queries -->
+    <!-- Package visibility (Android 11+): opening the developer's GitHub
+         page and the Play listing needs a browser/Play resolver. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -142,8 +150,8 @@
             <data android:scheme="https" />
         </intent>
         <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT"/>
-            <data android:mimeType="text/plain"/>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
         </intent>
     </queries>
 </manifest>

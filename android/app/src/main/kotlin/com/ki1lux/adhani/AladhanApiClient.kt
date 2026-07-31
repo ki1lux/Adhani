@@ -1,4 +1,4 @@
-package com.example.myadhan
+package com.ki1lux.adhani
 
 import android.util.Log
 import org.json.JSONObject

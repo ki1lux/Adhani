@@ -1,4 +1,4 @@
-package com.example.myadhan
+package com.ki1lux.adhani
 
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -28,15 +28,32 @@ object AlarmSchedulerHelper {
     private const val LOOKAHEAD_DAYS = 3
 
     /**
-     * Schedule a single prayer alarm using AlarmManager.setAlarmClock().
-     * This is the highest priority alarm on Android — survives Doze mode.
+     * True when the OS will let us set an exact alarm.
+     *
+     * On Android 12+ `SCHEDULE_EXACT_ALARM` is a user-revocable permission,
+     * and it can be revoked at any time after being granted. Calling
+     * [AlarmManager.setAlarmClock] without it throws `SecurityException`.
+     */
+    fun canScheduleExact(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        return alarmManager.canScheduleExactAlarms()
+    }
+
+    /**
+     * Schedule a single prayer alarm using AlarmManager.setAlarmClock() —
+     * the highest priority alarm on Android, which survives Doze.
+     *
+     * When the user hasn't granted the exact-alarm permission this degrades to
+     * `setAndAllowWhileIdle` rather than doing nothing. That alarm can drift by
+     * a few minutes, which is a far better outcome than the previous
+     * behaviour: the `SecurityException` was swallowed by the catch-all below
+     * and the Adhan simply never sounded, with nothing to indicate why.
      */
     fun scheduleAlarm(context: Context, prayerId: Int, triggerAtMillis: Long) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         Log.d(TAG, "Scheduling alarm: prayerId=$prayerId, triggerAt=$triggerAtMillis")
-        Log.d(TAG, "Current time: ${System.currentTimeMillis()}")
-        Log.d(TAG, "Alarm in ${(triggerAtMillis - System.currentTimeMillis()) / 1000} seconds")
 
         // Don't schedule alarms in the past
         if (triggerAtMillis <= System.currentTimeMillis()) {
@@ -56,17 +73,31 @@ object AlarmSchedulerHelper {
         )
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (canScheduleExact(context)) {
                 val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerAtMillis, pendingIntent)
                 alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
-                Log.d(TAG, "setAlarmClock scheduled successfully for prayer $prayerId")
+                Log.d(TAG, "setAlarmClock scheduled for prayer $prayerId")
             } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-                Log.d(TAG, "setExact scheduled successfully for prayer $prayerId")
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
+                )
+                Log.w(
+                    TAG,
+                    "Exact alarms not permitted — prayer $prayerId scheduled inexactly"
+                )
+            }
+        } catch (e: SecurityException) {
+            // Permission revoked between the check and the call.
+            Log.e(TAG, "Exact alarm denied for $prayerId, falling back to inexact")
+            try {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
+                )
+            } catch (e2: Exception) {
+                Log.e(TAG, "Inexact fallback also failed for $prayerId: ${e2.message}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error scheduling alarm $prayerId: ${e.message}")
-            e.printStackTrace()
         }
     }
 
@@ -86,7 +117,7 @@ object AlarmSchedulerHelper {
         }
 
         val intent = Intent(context, PrayerWidgetProvider::class.java).apply {
-            action = "com.example.myadhan.ACTION_PRAYER_UPDATED"
+            action = "com.ki1lux.adhani.ACTION_PRAYER_UPDATED"
         }
 
         val pendingIntent = PendingIntent.getBroadcast(
@@ -97,11 +128,22 @@ object AlarmSchedulerHelper {
         )
 
         try {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-            Log.d(TAG, "Widget refresh alarm scheduled: prayerId=$prayerId, triggerAt=$triggerAtMillis")
+            // A widget repaint a minute late is invisible, so this never needs
+            // the exact-alarm permission — `setExactAndAllowWhileIdle` throws
+            // SecurityException without it on Android 12+, which used to take
+            // the widget's per-prayer refresh down with it.
+            if (canScheduleExact(context)) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
+                )
+            } else {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
+                )
+            }
+            Log.d(TAG, "Widget refresh alarm scheduled: prayerId=$prayerId")
         } catch (e: Exception) {
             Log.e(TAG, "Error scheduling widget refresh alarm $prayerId: ${e.message}")
-            e.printStackTrace()
         }
     }
 
@@ -122,7 +164,7 @@ object AlarmSchedulerHelper {
             alarmManager.cancel(pendingIntent)
 
             val widgetIntent = Intent(context, PrayerWidgetProvider::class.java).apply {
-                action = "com.example.myadhan.ACTION_PRAYER_UPDATED"
+                action = "com.ki1lux.adhani.ACTION_PRAYER_UPDATED"
             }
             val widgetPendingIntent = PendingIntent.getBroadcast(
                 context,
@@ -160,6 +202,16 @@ object AlarmSchedulerHelper {
         val now = System.currentTimeMillis()
         var scheduledCount = 0
 
+        // Parsed once for all five prayers.
+        //
+        // [nextOccurrence] used to call `PrayerMonthCache.read` itself, so a
+        // reschedule where several triggers had passed re-parsed the same
+        // ~30-day JSON document up to five times. This function runs on the
+        // main thread of a BroadcastReceiver — from BootReceiver during the
+        // boot storm, and from PrayerAlarmReceiver at every prayer — where the
+        // budget before an ANR is ten seconds and the device is already busy.
+        val cache = PrayerMonthCache.read(prefs)
+
         Log.d(TAG, "Rescheduling all alarms from SharedPreferences...")
 
         for (prayerId in 1..5) {
@@ -179,7 +231,7 @@ object AlarmSchedulerHelper {
             // If the trigger time has passed, re-derive the next occurrence.
             var actualTrigger = triggerMillis
             if (actualTrigger <= now) {
-                actualTrigger = nextOccurrence(context, prefs, prayerId, now)
+                actualTrigger = nextOccurrence(cache, prefs, prayerId, now)
 
                 if (actualTrigger <= now) {
                     Log.w(TAG, "Prayer $prayerId ($name): could not resolve a future trigger")
@@ -212,7 +264,7 @@ object AlarmSchedulerHelper {
         Log.d(TAG, "Rescheduled $scheduledCount alarms from SharedPreferences")
 
         // Notify Home Screen Widget to update
-        val intent = Intent("com.example.myadhan.ACTION_PRAYER_UPDATED")
+        val intent = Intent("com.ki1lux.adhani.ACTION_PRAYER_UPDATED")
         intent.setPackage(context.packageName)
         context.sendBroadcast(intent)
     }
@@ -236,13 +288,11 @@ object AlarmSchedulerHelper {
      * time and DST right.
      */
     private fun nextOccurrence(
-        context: Context,
+        cache: PrayerMonthCache.Cache?,
         prefs: SharedPreferences,
         prayerId: Int,
         now: Long
     ): Long {
-        val cache = PrayerMonthCache.read(prefs)
-
         // Look ahead a bounded number of days rather than looping forever on a
         // malformed time string.
         for (dayOffset in 0..LOOKAHEAD_DAYS) {

@@ -1,4 +1,4 @@
-package com.example.myadhan
+package com.ki1lux.adhani
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -44,7 +44,7 @@ class PrayerWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         // If data was refreshed, update all widgets
-        if (intent.action == "com.example.myadhan.ACTION_PRAYER_UPDATED") {
+        if (intent.action == "com.ki1lux.adhani.ACTION_PRAYER_UPDATED") {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val componentName = android.content.ComponentName(context, PrayerWidgetProvider::class.java)
             val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
@@ -74,6 +74,27 @@ class PrayerWidgetProvider : AppWidgetProvider() {
 
         /** Fallback timeline width when the host reports nothing usable. */
         private const val DEFAULT_WIDTH_DP = 320
+
+        /**
+         * Row view ids, indexed by prayer id (1..5); index 0 is unused so the
+         * arrays line up with the ids used everywhere else in the app.
+         *
+         * These were resolved with `Resources.getIdentifier("text_name_$i")`,
+         * which is a reflection-shaped lookup that R8/AAPT cannot see: it
+         * survives today only because resource-name obfuscation happens to be
+         * off, and it fails silently — an empty widget, no exception — if that
+         * ever changes. Direct R references are checked at compile time.
+         */
+        private val NAME_VIEW_IDS = intArrayOf(
+            0,
+            R.id.text_name_1, R.id.text_name_2, R.id.text_name_3,
+            R.id.text_name_4, R.id.text_name_5
+        )
+        private val TIME_VIEW_IDS = intArrayOf(
+            0,
+            R.id.text_time_1, R.id.text_time_2, R.id.text_time_3,
+            R.id.text_time_4, R.id.text_time_5
+        )
 
         /// Shown on the date line once the times are old enough to be visibly
         /// wrong. Deliberately terse — the widget has one line to spare.
@@ -282,12 +303,9 @@ class PrayerWidgetProvider : AppWidgetProvider() {
                 computedTriggers[i] = actualTriggerMillis
 
                 // Populate text
-                val nameResId = context.resources.getIdentifier("text_name_$i", "id", context.packageName)
-                val timeResId = context.resources.getIdentifier("text_time_$i", "id", context.packageName)
-
-                if (name != null && nameResId != 0 && timeResId != 0) {
-                    views.setTextViewText(nameResId, name)
-                    views.setTextViewText(timeResId, time)
+                if (name != null) {
+                    views.setTextViewText(NAME_VIEW_IDS[i], name)
+                    views.setTextViewText(TIME_VIEW_IDS[i], time)
                 }
 
                 // Determine if this is the upcoming prayer
@@ -304,17 +322,15 @@ class PrayerWidgetProvider : AppWidgetProvider() {
             // 2. Three states across the row: the next prayer in accent, ones
             // already prayed today dimmed, the rest normal.
             for (i in 1..5) {
-                val nameResId = context.resources.getIdentifier("text_name_$i", "id", context.packageName)
-                val timeResId = context.resources.getIdentifier("text_time_$i", "id", context.packageName)
-                if (nameResId == 0 || timeResId == 0 || computedTriggers[i] == 0L) continue
+                if (computedTriggers[i] == 0L) continue
 
                 val color = when {
                     i == nextPrayerId -> COLOR_ACCENT
                     passedToday[i] -> COLOR_PASSED
                     else -> COLOR_BODY
                 }
-                views.setTextColor(nameResId, Color.parseColor(color))
-                views.setTextColor(timeResId, Color.parseColor(color))
+                views.setTextColor(NAME_VIEW_IDS[i], Color.parseColor(color))
+                views.setTextColor(TIME_VIEW_IDS[i], Color.parseColor(color))
             }
 
             // The timeline bitmap is sized to the widget's real width so the

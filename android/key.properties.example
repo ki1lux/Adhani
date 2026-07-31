@@ -1,0 +1,15 @@
+# Copy to android/key.properties and fill in with your upload key.
+# android/key.properties is gitignored — never commit real credentials.
+#
+# Create an upload keystore with:
+#   keytool -genkey -v -keystore ~/adhani-upload.jks -keyalg RSA \
+#           -keysize 2048 -validity 10000 -alias upload
+#
+# Then enrol in Play App Signing (Play Console → Setup → App signing) so
+# Google holds the app signing key and this one is only the upload key.
+
+storePassword=<password used when creating the keystore>
+keyPassword=<password for the key alias>
+keyAlias=upload
+# Absolute path, or relative to the android/ directory.
+storeFile=/Users/you/adhani-upload.jks

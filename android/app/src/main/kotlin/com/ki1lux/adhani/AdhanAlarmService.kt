@@ -1,4 +1,4 @@
-package com.example.myadhan
+package com.ki1lux.adhani
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -21,16 +21,35 @@ class AdhanAlarmService : Service() {
         private const val TAG = "AdhanAlarmService"
         private const val CHANNEL_ID = "adhan_playback_channel_v2"
         private const val NOTIFICATION_ID = 1001
-        const val ACTION_STOP_ADHAN = "com.example.myadhan.STOP_ADHAN"
+        const val ACTION_STOP_ADHAN = "com.ki1lux.adhani.STOP_ADHAN"
+
+        /** Longest the Adhan may run before the service stops itself. */
+        private const val MAX_PLAYBACK_MS = 6 * 60 * 1000L
     }
 
     private var currentPrayerName = "الصلاة"
     private var currentPrayerTime = ""
     private val handler = Handler(Looper.getMainLooper())
     private var isPlaying = false
-    private var startTimeMillis: Long = 0
 
-    // Receiver for hardware buttons (Power / Volume)
+    /**
+     * Hard ceiling on how long this foreground service may live.
+     *
+     * The service normally stops itself from [AdhanPlayer]'s completion
+     * callback. If MediaPlayer stalls without ever reporting completion or an
+     * error — a decoder wedged on a corrupt file, audio focus lost to a call
+     * that never ends — nothing else would ever call [stopAdhanAndService],
+     * and a foreground service with a wake-locked media player would sit there
+     * draining the battery until the user rebooted. The longest bundled Adhan
+     * is under four minutes.
+     */
+    private val playbackTimeout = Runnable {
+        Log.w(TAG, "Adhan exceeded its maximum duration — stopping")
+        stopAdhanAndService()
+    }
+
+    // Volume keys silence the Adhan — the same gesture that silences any
+    // other alarm.
     private val hardwareButtonReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             Log.d(TAG, "Hardware/Screen action received: ${intent.action}")
@@ -46,21 +65,6 @@ class AdhanAlarmService : Service() {
         }
     }
 
-    // Re-posts notification if swiped away (Android 14+)
-    private val notificationWatchdog = object : Runnable {
-        override fun run() {
-            if (!isPlaying) return
-            val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val active = mgr.activeNotifications.any { it.id == NOTIFICATION_ID }
-            if (!active) {
-                Log.d(TAG, "Notification swiped — re-posting in drawer")
-                val notification = buildNotification(currentPrayerName, currentPrayerTime)
-                mgr.notify(NOTIFICATION_ID, notification)
-            }
-            handler.postDelayed(this, 2000)
-        }
-    }
-
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -69,16 +73,21 @@ class AdhanAlarmService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(stopReceiver, filter, RECEIVER_NOT_EXPORTED)
         } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(stopReceiver, filter)
         }
 
-        // Register hardware buttons receiver
-        val hardwareFilter = IntentFilter().apply {
-            // addAction(Intent.ACTION_SCREEN_OFF)
-            addAction("android.media.VOLUME_CHANGED_ACTION")
+        // Register hardware buttons receiver. VOLUME_CHANGED_ACTION is a
+        // protected system broadcast, so NOT_EXPORTED is both correct and
+        // what Android 14+ asks for — an unflagged registration is what
+        // trips SecurityException on API 34.
+        val hardwareFilter = IntentFilter("android.media.VOLUME_CHANGED_ACTION")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(hardwareButtonReceiver, hardwareFilter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(hardwareButtonReceiver, hardwareFilter)
         }
-        // System broadcasts do not require the RECEIVER_EXPORTED flag even on Android 14+
-        registerReceiver(hardwareButtonReceiver, hardwareFilter)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -88,7 +97,6 @@ class AdhanAlarmService : Service() {
 
         currentPrayerName = prayerName
         currentPrayerTime = prayerTime
-        startTimeMillis = System.currentTimeMillis()
 
         Log.d(TAG, "Starting Adhan: $prayerName at $prayerTime, sound=$soundName")
 
@@ -115,9 +123,9 @@ class AdhanAlarmService : Service() {
             stopAdhanAndService()
         }
 
-        // Start watchdog to re-post notification if swiped
         isPlaying = true
-        handler.postDelayed(notificationWatchdog, 2000)
+        handler.removeCallbacks(playbackTimeout)
+        handler.postDelayed(playbackTimeout, MAX_PLAYBACK_MS)
 
         return START_NOT_STICKY
     }
@@ -125,7 +133,7 @@ class AdhanAlarmService : Service() {
     override fun onDestroy() {
         Log.d(TAG, "Service destroyed")
         isPlaying = false
-        handler.removeCallbacks(notificationWatchdog)
+        handler.removeCallbacks(playbackTimeout)
         AdhanPlayer.stop()
         try {
             unregisterReceiver(stopReceiver)
@@ -144,7 +152,7 @@ class AdhanAlarmService : Service() {
 
     private fun stopAdhanAndService() {
         isPlaying = false
-        handler.removeCallbacks(notificationWatchdog)
+        handler.removeCallbacks(playbackTimeout)
         AdhanPlayer.stop()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

@@ -1,4 +1,4 @@
-package com.example.myadhan
+package com.ki1lux.adhani
 
 import android.content.BroadcastReceiver
 import android.content.Context
