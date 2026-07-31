@@ -12,7 +12,7 @@
   [![Android](https://img.shields.io/badge/Android-24_→_36-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
 </div>
 
-## 🕌 About
+## About
 
 **Adhani** is an Arabic-first Islamic app built with Flutter on top of a deep
 native Android backend. It gives you accurate location-based prayer times, a
@@ -25,35 +25,35 @@ that alarms, the countdown notification and the home-screen widget keep working
 when the app is killed, the device is rebooted, or there's no connection for a
 month.
 
-## ✨ Features
+## Features
 
-- **🕐 Accurate prayer times** — fetched from the [Aladhan API](https://aladhan.com/prayer-times-api)
+- **Accurate prayer times** — fetched from the [Aladhan API](https://aladhan.com/prayer-times-api)
   for your exact coordinates, with **23 calculation methods** to choose from
   (Umm al-Qura, ISNA, Muslim World League, Egypt, Turkey, and more).
-- **📴 Genuinely offline** — one request caches a **full month ahead**, so prayer
+- **Genuinely offline** — one request caches a **full month ahead**, so prayer
   times, alarms, the countdown and the widget all keep working with no network.
   Reconnecting refreshes automatically.
-- **🔔 Reliable Adhan alarms** — `AlarmManager.setAlarmClock` survives Doze, and
+- **Reliable Adhan alarms** — `AlarmManager.setAlarmClock` survives Doze, and
   the alarms re-arm themselves every time one fires, so they never run out.
   Falls back to an inexact alarm if you decline the exact-alarm permission,
   rather than going silent.
-- **🎵 Three Adhan recordings** — chosen per prayer, played on the alarm audio
+- **Three Adhan recordings** — chosen per prayer, played on the alarm audio
   stream so notification sounds can't duck them. Preview each one in settings.
-- **⏱️ Live countdown notification** — an ongoing notification counting down to
+- **Live countdown notification** — an ongoing notification counting down to
   the next prayer, and up through the Iqamah window after it. Can be switched
   off entirely.
-- **🏠 Home-screen widget** — the day's five prayers, a progress ring, and a live
+- **Home-screen widget** — the day's five prayers, a progress ring, and a live
   chronometer to the next one. Re-derives what's next on every update, so it
   stays right even when data is stale.
-- **🧭 Qibla compass** — a smooth needle to Mecca from the device's
+- **Qibla compass** — a smooth needle to Mecca from the device's
   magnetometer, with haptic and audio feedback as you approach alignment, and
   your great-circle distance to the Kaaba.
-- **🌙 Hijri date** — turns over at Maghrib, when the Islamic day actually
+- **Hijri date** — turns over at Maghrib, when the Islamic day actually
   begins, not at midnight.
-- **🔁 Survives reboots and updates** — `BootReceiver` re-arms everything.
-- **🔒 No accounts, no analytics, no ads** — see [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
+- **Survives reboots and updates** — `BootReceiver` re-arms everything.
+- **No accounts, no analytics, no ads** — see [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
-## 🏗️ Architecture
+## Architecture
 
 The Dart UI is a relatively thin layer over an independent native Android
 backend. The two halves **do not talk to each other at runtime** — they share
@@ -90,7 +90,7 @@ re-arming alarms from the same shared prefs.
 See [CLAUDE.md](CLAUDE.md) for the full contract, including the exact key names
 that must stay in sync across both languages.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Flutter
 
@@ -125,7 +125,7 @@ that must stay in sync across both languages.
 | `AladhanApiClient` | Dependency-free `HttpURLConnection` client |
 | `BootReceiver` | Restores everything after reboot or app update |
 
-## 📁 Project Structure
+## Project Structure
 
 ```text
 Adhanuk/
@@ -148,13 +148,13 @@ Adhanuk/
 └── PLAY_STORE_CHECKLIST.md         # Release checklist
 ```
 
-## 📸 Screenshots
+## Screenshots
 
 | Home | Qibla Compass | Prayer Times |
 |:---:|:---:|:---:|
 | <img width="240" alt="Home screen with analog clock and next prayer countdown" src="https://github.com/user-attachments/assets/7af0c2a4-e038-441b-b7c2-208165dbd679" /> | <img width="240" alt="Qibla compass" src="https://github.com/user-attachments/assets/ddc2f61b-c534-4069-b469-473760e41c7e" /> | <img width="240" alt="Daily prayer times list" src="https://github.com/user-attachments/assets/9207f318-b1ca-4633-b55d-c2d7eec5aa09" /> |
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -174,7 +174,7 @@ flutter run
 No API keys or `.env` file are needed — the Aladhan and Nominatim APIs are both
 keyless.
 
-> **⚠️ Test background behaviour on a physical Android device.** Emulators
+> **Test background behaviour on a physical Android device.** Emulators
 > don't reproduce the Doze and battery-optimisation behaviour this app is
 > specifically built around, and that covers alarms, the countdown
 > notification, boot recovery and the widget.
@@ -206,7 +206,7 @@ Without that file the release build still succeeds but is signed with the debug
 key and prints a warning — such a build cannot be uploaded to Google Play.
 Full pre-launch steps are in [PLAY_STORE_CHECKLIST.md](PLAY_STORE_CHECKLIST.md).
 
-## 🔐 Privacy
+## Privacy
 
 Adhani has no accounts, no analytics and no ads, and the developer runs no
 server. Your coordinates are sent to two services — Aladhan (to calculate the
@@ -216,7 +216,7 @@ without the permission at all if you pick your city by hand.
 
 Full details: [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
-## 🤝 Contributing
+## Contributing
 
 Issues and pull requests are welcome. Two things worth knowing first:
 
@@ -229,7 +229,7 @@ Issues and pull requests are welcome. Two things worth knowing first:
 Please make sure `flutter analyze` and `flutter test` are clean before opening
 a PR.
 
-## 🙏 Credits
+## Credits
 
 - Prayer times & Hijri dates — [Aladhan API](https://aladhan.com/) by Islamic Network
 - Place names — [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/)
@@ -238,5 +238,5 @@ a PR.
 ---
 
 <div align="center">
-  Made with 🩵 using Flutter &amp; Kotlin — by <a href="https://github.com/ki1lux">ki1lux</a>
+  Made with Flutter &amp; Kotlin — by <a href="https://github.com/ki1lux">ki1lux</a>
 </div>
