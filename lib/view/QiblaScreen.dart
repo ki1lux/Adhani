@@ -620,29 +620,44 @@ class _QiblaScreenState extends State<QiblaScreen> {
                     turns: _lastCompassTurns,
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeOut,
-                    child: const CustomPaint(
-                      size: Size(360, 360),
-                      painter: CompassRingPainter(
-                        fillColor: AppColors.dialFace,
-                        ringColor: AppColors.archBottom,
-                        tickColor: AppColors.onLightSecondary,
-                        labelColor: AppColors.onLightSecondary,
-                        cardinalColor: AppColors.onLight,
+                    // The dial's own pixels never change — only the matrix
+                    // spinning them does. Without the boundary, every frame
+                    // of that rotation re-runs `CompassRingPainter.paint`,
+                    // which lays out twelve `TextPainter`s and strokes 36
+                    // ticks plus a 72-segment dashed ring from scratch. With
+                    // it, the ring is rasterized once and the rotation is a
+                    // transform on the cached layer.
+                    child: const RepaintBoundary(
+                      child: CustomPaint(
+                        size: Size(360, 360),
+                        painter: CompassRingPainter(
+                          fillColor: AppColors.dialFace,
+                          ringColor: AppColors.archBottom,
+                          tickColor: AppColors.onLightSecondary,
+                          labelColor: AppColors.onLightSecondary,
+                          cardinalColor: AppColors.onLight,
+                        ),
                       ),
                     ),
                   ),
-                  CustomPaint(
-                    size: const Size(360, 360),
-                    painter: QiblaArcPainter(
-                      sweepDegrees: sweepDegrees,
-                      color: AppColors.accent,
+                  RepaintBoundary(
+                    child: CustomPaint(
+                      size: const Size(360, 360),
+                      painter: QiblaArcPainter(
+                        sweepDegrees: sweepDegrees,
+                        color: AppColors.accent,
+                      ),
                     ),
                   ),
                   AnimatedRotation(
                     turns: _lastQiblaTurns,
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeOut,
-                    child: SvgPicture.asset("assets/ka3baInCompass.svg"),
+                    // Same reasoning as the dial: an SVG replayed per frame
+                    // of its own rotation, versus rasterized once.
+                    child: RepaintBoundary(
+                      child: SvgPicture.asset("assets/ka3baInCompass.svg"),
+                    ),
                   ),
                   // One number only. The dial reports where the user is
                   // facing; the instruction above says what to do about it.

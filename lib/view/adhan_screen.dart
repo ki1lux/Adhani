@@ -34,6 +34,22 @@ class _AdhanScreenState extends ConsumerState<AdhanScreen> {
   /// exactly what changed.
   final ValueNotifier<DateTime> _now = ValueNotifier(DateTime.now());
 
+  /// Built once, not once a second.
+  ///
+  /// `DateFormat.jm(locale)` isn't a cheap accessor — it resolves the locale,
+  /// looks up the symbol set and parses the skeleton into a pattern. The
+  /// clock text below rebuilds every tick, so constructing it inline meant
+  /// paying all of that 86,400 times a day to format a string that changes
+  /// once a minute.
+  ///
+  /// Reads the actual device locale directly rather than
+  /// Localizations.maybeLocaleOf(context): this app renders its own Arabic
+  /// strings regardless of device language, so the point here is only to
+  /// match the platform's 12/24-hour convention.
+  static final _timeFormat = intl.DateFormat.jm(
+    WidgetsBinding.instance.platformDispatcher.locale.toString(),
+  );
+
   @override
   void dispose() {
     _now.dispose();
@@ -176,12 +192,6 @@ class _AdhanScreenState extends ConsumerState<AdhanScreen> {
   }
 
   Widget _buildTimeDateRow(BuildContext context) {
-    // Reads the actual device locale directly rather than
-    // Localizations.maybeLocaleOf(context) — this app never configured
-    // MaterialApp.localizationsDelegates/supportedLocales, so that
-    // resolves unreliably instead of reflecting the real device setting.
-    final locale = WidgetsBinding.instance.platformDispatcher.locale.toString();
-
     final hijri = ref
         .watch(prayerTimesProvider)
         .when(
@@ -206,7 +216,7 @@ class _AdhanScreenState extends ConsumerState<AdhanScreen> {
           valueListenable: _now,
           builder:
               (context, now, _) => Text(
-                intl.DateFormat.jm(locale).format(now),
+                _timeFormat.format(now),
                 textDirection: TextDirection.ltr,
                 style: const TextStyle(
                   fontFamily: 'cairo',

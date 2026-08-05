@@ -105,18 +105,33 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   }
 
   /// Detect when the app resumes from the background.
-  /// If the date has changed (e.g. midnight crossed while backgrounded),
-  /// re-fetch prayer times so the Hijri date updates immediately.
+  ///
+  /// Two things can have changed while we weren't looking, and they're
+  /// independent:
+  ///  * the **date** — midnight was crossed, so the Hijri date and times are
+  ///    for a day that's over;
+  ///  * the **place** — the user travelled, so the times are for a city
+  ///    they're no longer in.
+  ///
+  /// Only the date was checked before, so travelling and reopening the app on
+  /// the same day left the old city's times in place indefinitely.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      final today = _todayString();
-      if (today != _lastFetchDate) {
-        logDebug('📅 Date changed — refreshing prayer times');
-        _lastFetchDate = today;
-        ref.read(prayerTimesProvider.notifier).fetchPrayerTimes();
-      }
+    if (state != AppLifecycleState.resumed) return;
+
+    final today = _todayString();
+    if (today != _lastFetchDate) {
+      logDebug('📅 Date changed — refreshing prayer times');
+      _lastFetchDate = today;
+      ref.read(prayerTimesProvider.notifier).fetchPrayerTimes();
+      // A full refresh re-reads the location anyway, so the check below would
+      // be redundant work on top of it.
+      return;
     }
+
+    // Cheap: reads the OS's already-cached position, no GPS fix. Returns
+    // without doing anything unless the user has actually moved.
+    ref.read(prayerTimesProvider.notifier).checkForLocationChange();
   }
 
   /// Returns today's date as "yyyy-MM-dd".
@@ -436,13 +451,28 @@ class _FadeIndexedStackState extends State<FadeIndexedStack> {
           // reader — without this, TalkBack walks all four at once.
           child: ExcludeSemantics(
             excluding: !isActive,
-            // Animations in a fully faded-out child are invisible work.
-            child: TickerMode(
-              enabled: isActive,
-              child: AnimatedOpacity(
-                duration: widget.duration,
-                curve: Curves.easeInOut,
-                opacity: isActive ? 1.0 : 0.0,
+            // The fade must sit *outside* the TickerMode, not inside it.
+            //
+            // AnimatedOpacity drives this cross-fade with its own ticker, and
+            // that ticker is vsynced against the nearest enclosing TickerMode.
+            // Nested the other way round, leaving a tab muted its fade in the
+            // very same frame that asked the fade to run — so the animation
+            // never advanced and the tab stayed pinned at opacity 1.0. Because
+            // a later child paints over an earlier one, every tab the user had
+            // ever opened stayed stacked opaquely on top of the one they'd
+            // actually selected: you could move to a tab you hadn't visited
+            // yet, but never back to one you had.
+            child: AnimatedOpacity(
+              duration: widget.duration,
+              curve: Curves.easeInOut,
+              opacity: isActive ? 1.0 : 0.0,
+              // Animations in a fully faded-out child are invisible work.
+              // The outgoing tab's own animations stop the moment it's
+              // deselected rather than when the fade lands — 350ms of a
+              // frozen second hand under a dissolving layer, which is not
+              // something the eye can pick up.
+              child: TickerMode(
+                enabled: isActive,
                 child: widget.children[i],
               ),
             ),

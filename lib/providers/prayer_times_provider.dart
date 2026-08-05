@@ -572,6 +572,48 @@ class PrayerTimesNotifier extends StateNotifier<AsyncValue<PrayerTimeModel>> {
     _failureCount = 0;
     return fetchPrayerTimes(lat: _manualLat, lng: _manualLng);
   }
+
+  /// Notices that the user has travelled, and refetches if so.
+  ///
+  /// Called when the app comes back to the foreground. The expensive part of a
+  /// refresh is acquiring a GPS fix, so this deliberately doesn't: it asks the
+  /// OS for the position it already has cached — free, instant, no hardware —
+  /// and only escalates to a full [fetchPrayerTimes] when that position is
+  /// outside the radius the cached month describes.
+  ///
+  /// The comparison itself is [MonthCache.isNear], the same 25km test
+  /// [_needsRefresh] already uses, so "has the user moved enough to matter?"
+  /// has exactly one definition in the app.
+  ///
+  /// Does nothing when the user picked their city by hand — they've told us
+  /// where they want times for, and physically moving doesn't revoke that.
+  Future<void> checkForLocationChange() async {
+    if (_manualLat != null && _manualLng != null) return;
+    if (_fetchInFlight) return;
+
+    try {
+      final position = await _locationController.lastKnownPosition();
+      // No cached fix, or no permission — "don't know", not "hasn't moved".
+      if (position == null) return;
+
+      final cache = await _cache.read();
+      if (cache == null) return;
+
+      if (cache.isNear(position.latitude, position.longitude)) return;
+
+      logDebug(
+        '📍 Moved outside the cached area '
+        '(${cache.latitude}, ${cache.longitude}) → '
+        '(${position.latitude}, ${position.longitude}) — refreshing',
+      );
+      _failureCount = 0;
+      await fetchPrayerTimes();
+    } catch (e) {
+      // A failed check is not worth surfacing: the times on screen are still
+      // the best we have, and the next resume tries again.
+      logDebug('⚠️ Location change check failed: $e');
+    }
+  }
 }
 
 /// Provider for prayer times with loading, success, and error states

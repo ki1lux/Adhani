@@ -32,6 +32,11 @@ class _NextPrayerCardState extends ConsumerState<NextPrayerCard> {
     'العشاء': 'isha',
   };
 
+  /// Same reasoning as adhan_screen's: built once rather than per rebuild.
+  static final _timeFormat = intl.DateFormat.jm(
+    WidgetsBinding.instance.platformDispatcher.locale.toString(),
+  );
+
   String? _prayerName;
   bool _isAdhanPhase = true;
 
@@ -66,9 +71,6 @@ class _NextPrayerCardState extends ConsumerState<NextPrayerCard> {
   @override
   Widget build(BuildContext context) {
     final prayerTimesAsync = ref.watch(prayerTimesProvider);
-    // Same reasoning as adhan_screen.dart: read the device locale directly
-    // rather than through the (unconfigured) Localizations tree.
-    final locale = WidgetsBinding.instance.platformDispatcher.locale.toString();
 
     String? timeLabel;
     prayerTimesAsync.whenData((data) {
@@ -76,7 +78,7 @@ class _NextPrayerCardState extends ConsumerState<NextPrayerCard> {
       if (name == null) return;
       final time = _timeOf(name, data);
       if (time != null) {
-        timeLabel = intl.DateFormat.jm(locale).format(time);
+        timeLabel = _timeFormat.format(time);
       }
     });
 

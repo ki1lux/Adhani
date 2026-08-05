@@ -16,12 +16,6 @@ class AppBackground extends StatelessWidget {
 
   const AppBackground({super.key, required this.child});
 
-  // Top of the radial glow → mid navy (the base surface) → bottom fade.
-  static const _glowTopSoft = Color(0xFF0F3348);
-  static const _midNavy = Color(0xFF0A2740);
-  static const _bottomFade = Color(0xFF061726);
-  static const _bottomDeep = Color(0xFF05131F);
-
   /// `Vector.svg` already bakes its own `<g opacity="0.51">` around every
   /// path and its own dark-navy fill — that's the exact recipe every screen
   /// used before this widget existed, and it read clearly against the navy
@@ -39,41 +33,67 @@ class AppBackground extends StatelessWidget {
       // bare Scaffold color below it.
       fit: StackFit.expand,
       children: [
-        // Base vertical fade: glow at the top, deep navy at the bottom.
+        // Every layer below is static for the lifetime of the screen, but it
+        // sits underneath content that animates continuously — the compass
+        // dial at ~60Hz, the next-prayer glow, the clock's second hand. In one
+        // undivided layer, each of those frames also re-records this gradient
+        // stack *and* replays Vector.svg's whole girih path set. The boundary
+        // hands the background its own retained layer, so an animating
+        // foreground only costs a recomposite of an already-rasterized bitmap.
         const Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  _glowTopSoft,
-                  _midNavy,
-                  _bottomFade,
-                  _bottomDeep,
-                ],
-                stops: [0.0, 0.38, 0.82, 1.0],
-              ),
+          child: RepaintBoundary(
+            child: IgnorePointer(child: _BackgroundLayers()),
+          ),
+        ),
+        child,
+      ],
+    );
+  }
+}
+
+/// The decoration itself, split out only so [AppBackground] can hand it to a
+/// `const` [RepaintBoundary] subtree — a const widget is also skipped during
+/// rebuilds, not just repaints.
+class _BackgroundLayers extends StatelessWidget {
+  const _BackgroundLayers();
+
+  // Top of the radial glow → mid navy (the base surface) → bottom fade.
+  static const _glowTopSoft = Color(0xFF0F3348);
+  static const _midNavy = Color(0xFF0A2740);
+  static const _bottomFade = Color(0xFF061726);
+  static const _bottomDeep = Color(0xFF05131F);
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Base vertical fade: glow at the top, deep navy at the bottom.
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [_glowTopSoft, _midNavy, _bottomFade, _bottomDeep],
+              stops: [0.0, 0.38, 0.82, 1.0],
             ),
           ),
         ),
         // Radial hotspot near the top so the glow reads as light falling
         // from above rather than a flat linear ramp.
-        const Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0.0, -0.85),
-                radius: 0.65,
-                // Kept in lockstep with _glowTopSoft (same base hue, same
-                // darkening) rather than tuned per-screen — screens without
-                // a light card covering the very top (PrayerTimeScreen,
-                // Qibla) expose this hotspot directly, so darkening the one
-                // shared color keeps every screen consistent instead of
-                // forking the background per-screen.
-                colors: [Color(0xB30F3348), Color(0x000F3348)],
-                stops: [0.0, 1.0],
-              ),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment(0.0, -0.85),
+              radius: 0.65,
+              // Kept in lockstep with _glowTopSoft (same base hue, same
+              // darkening) rather than tuned per-screen — screens without
+              // a light card covering the very top (PrayerTimeScreen,
+              // Qibla) expose this hotspot directly, so darkening the one
+              // shared color keeps every screen consistent instead of
+              // forking the background per-screen.
+              colors: [Color(0xB30F3348), Color(0x000F3348)],
+              stops: [0.0, 1.0],
             ),
           ),
         ),
@@ -81,16 +101,11 @@ class AppBackground extends StatelessWidget {
         // tiling). Drawn as-is, same as every screen did before this widget
         // existed — its own dark-navy fill and baked-in group opacity are
         // already tuned to read against this background.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: SvgPicture.asset(
-              'assets/Vector.svg',
-              fit: BoxFit.cover,
-              alignment: Alignment.topCenter,
-            ),
-          ),
+        SvgPicture.asset(
+          'assets/Vector.svg',
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
         ),
-        child,
       ],
     );
   }

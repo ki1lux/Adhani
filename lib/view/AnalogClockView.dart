@@ -63,9 +63,17 @@ class _AnalogclockviewState extends State<Analogclockview> {
     // Decorative — the parent's digital time text is the accessible source
     // of truth for the current time, so this doesn't need its own label.
     return ExcludeSemantics(
-      child: CustomPaint(
-        painter: ClockPainter(model),
-        size: Size(widget.size, widget.size),
+      // The second hand moves once a second, and the dial around it never
+      // does. Undivided, that tick dirtied the layer it shares with the arch
+      // card's gradient and the pattern behind it; the boundary confines the
+      // repaint to the 260dp square that actually changed. `isComplex` marks
+      // the 60 tick marks as worth the raster cache's while.
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: ClockPainter(model),
+          size: Size(widget.size, widget.size),
+          isComplex: true,
+        ),
       ),
     );
   }

@@ -50,12 +50,56 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
   DateTime? _iqamaStartTime;
   String? _nextPrayerName;
 
+  /// Whether this countdown's tab is actually on screen.
+  ///
+  /// `Timer.periodic` knows nothing about the widget tree, so both countdowns
+  /// in this app — the Home card's and the prayer list's next-prayer row —
+  /// used to tick, `setState` and re-lay out their text once a second for the
+  /// whole session, including the one on whichever tab the user wasn't
+  /// looking at. Following the ambient [TickerMode] (which `FadeIndexedStack`
+  /// already switches off for hidden tabs, and which the engine mutes when
+  /// the app is backgrounded) is the same rule the analog clock follows.
+  bool _ticking = true;
+
   TextStyle get _effectiveStyle => widget.style ?? _textStyle;
 
   void _notifyPrayerInfo() {
     final name = _nextPrayerName;
     if (name != null) {
       widget.onPrayerInfo?.call(name, _isAdhanPhase);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final enabled = TickerMode.valuesOf(context).enabled;
+    if (enabled == _ticking) return;
+    _ticking = enabled;
+
+    if (!enabled) {
+      _timer?.cancel();
+      _timer = null;
+      return;
+    }
+
+    // Recompute from scratch rather than resuming: while this was paused the
+    // prayer we were counting down to may have passed, and its Iqamah window
+    // with it, so the phase we suspended in can be stale by hours.
+    final wasCountingDownTo = _nextPrayerName;
+    final wasAdhanPhase = _isAdhanPhase;
+    ref.read(prayerTimesProvider).whenData(_startCountdown);
+
+    // A rollover the parent would have been told about by `onFinish` had this
+    // been ticking. PrayerTimeScreen uses that callback to move its
+    // highlighted row, so without this a tab left on Dhuhr and revisited
+    // after Asr would still be pointing at Dhuhr. Deferred because
+    // didChangeDependencies runs during the build phase, and `onFinish`
+    // calls setState on an ancestor.
+    if (_nextPrayerName != wasCountingDownTo || _isAdhanPhase != wasAdhanPhase) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onFinish();
+      });
     }
   }
 
@@ -127,6 +171,10 @@ class _CountdownTimerState extends ConsumerState<CountdownTimer> {
 
     _notifyPrayerInfo();
     _updateRemaining();
+
+    // A rebuild while hidden must not re-arm what didChangeDependencies just
+    // stopped — the tab this is on gets the fresh value when it comes back.
+    if (!_ticking) return;
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;

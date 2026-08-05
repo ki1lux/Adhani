@@ -203,16 +203,45 @@ class PrayerTimeScreen extends ConsumerStatefulWidget {
   ConsumerState<PrayerTimeScreen> createState() => _PrayerTimeState();
 }
 
+/// The five prayers, in order, under the Arabic names used as the
+/// `adhan_enabled_*` / `adhan_sound_*` preference-key suffixes.
+const _prayerNames = ['الفجر', 'الظهر', 'العصر', 'المغرب', 'العشاء'];
+
 class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
   static const _nativeChannel = MethodChannel('com.myadhan/notification');
 
   String _countryText = 'الموقع...';
   String _cityText = '';
 
+  /// Per-prayer Adhan on/off, mirrored into state.
+  ///
+  /// This used to be five `Future<bool>`s handed to five `FutureBuilder`s —
+  /// but they were *created inside `build`*, so every rebuild of this screen
+  /// (a countdown rolling over, a row toggling, a refresh landing) produced
+  /// five brand-new futures. A `FutureBuilder` handed a new future resets to
+  /// `ConnectionState.waiting` with no data, so each mute icon fell back to
+  /// its `?? true` default and visibly flickered from muted to unmuted and
+  /// back on every one of those rebuilds. Reading once and keeping the answer
+  /// removes both the flicker and the repeated async platform reads.
+  Map<String, bool> _adhanEnabled = const {};
+
   @override
   void initState() {
     super.initState();
     _loadSavedLocation();
+    _refreshAdhanFlags();
+  }
+
+  /// Re-reads every `adhan_enabled_*` flag and rebuilds with the result.
+  /// Called on entry and after anything that writes one of them.
+  Future<void> _refreshAdhanFlags() async {
+    final prefs = await SharedPreferences.getInstance();
+    final flags = {
+      for (final name in _prayerNames)
+        name: prefs.getBool('adhan_enabled_$name') ?? true,
+    };
+    if (!mounted) return;
+    setState(() => _adhanEnabled = flags);
   }
 
   /// Nominatim's usage policy asks every client for a User-Agent that
@@ -1073,12 +1102,12 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
       time: time,
       isNext: isNext,
       isPassed: isPassed,
-      isAdhanEnabledFuture: _isAdhanEnabled(name),
+      isAdhanEnabled: _adhanEnabled[name] ?? true,
       onSoundTap: () => _showSoundDialog(name),
       onToggleAdhan: (enabled) async {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('adhan_enabled_$name', enabled);
-        setState(() {}); // Refresh parent list
+        await _refreshAdhanFlags(); // Refresh parent list
         final prayerTimesAsync = ref.read(prayerTimesProvider);
         if (prayerTimesAsync.hasValue) {
           await PrayerAlarmScheduler.scheduleAllPrayersWithData(
@@ -1090,11 +1119,6 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
         setState(() {}); // Rebuild the whole screen to move the active card!
       },
     );
-  }
-
-  Future<bool> _isAdhanEnabled(String prayerName) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('adhan_enabled_$prayerName') ?? true;
   }
 
   Future<void> _showSoundDialog(String prayerName) async {
@@ -1317,16 +1341,9 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                       color: AppColors.body,
                       weight: FontWeight.w600,
                       onTap: () async {
-                        final allPrayers = [
-                          'الفجر',
-                          'الظهر',
-                          'العصر',
-                          'المغرب',
-                          'العشاء',
-                        ];
                         Navigator.pop(context);
                         await _stopPreview();
-                        for (final name in allPrayers) {
+                        for (final name in _prayerNames) {
                           await prefs.setBool('adhan_enabled_$name', isEnabled);
                           await prefs.setString(
                             'adhan_sound_$name',
@@ -1335,7 +1352,8 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                         }
                         await _rescheduleAfterSoundChange();
                         if (!mounted) return;
-                        setState(() {});
+                        await _refreshAdhanFlags();
+                        if (!mounted) return;
                         AppToast.success(
                           // The screen's context, not the dialog's: the
                           // dialog has just been popped, so posting a
@@ -1364,7 +1382,9 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
 
                         await _rescheduleAfterSoundChange();
                         if (!mounted) return;
-                        setState(() {}); // Refresh UI to show icon change
+                        // Refresh UI to show icon change
+                        await _refreshAdhanFlags();
+                        if (!mounted) return;
 
                         // Saving used to close the dialog silently, leaving
                         // no confirmation that anything was stored. State
@@ -1428,7 +1448,7 @@ class _AnimatedPrayerCard extends StatefulWidget {
   final String time;
   final bool isNext;
   final bool isPassed;
-  final Future<bool> isAdhanEnabledFuture;
+  final bool isAdhanEnabled;
   final VoidCallback onSoundTap;
   final ValueChanged<bool> onToggleAdhan;
   final VoidCallback onFinishCountdown;
@@ -1438,7 +1458,7 @@ class _AnimatedPrayerCard extends StatefulWidget {
     required this.time,
     required this.isNext,
     required this.isPassed,
-    required this.isAdhanEnabledFuture,
+    required this.isAdhanEnabled,
     required this.onSoundTap,
     required this.onToggleAdhan,
     required this.onFinishCountdown,
@@ -1518,30 +1538,24 @@ class _AnimatedPrayerCardState extends State<_AnimatedPrayerCard> {
                       : const SizedBox.shrink(),
             ),
           ),
-          FutureBuilder<bool>(
-            future: widget.isAdhanEnabledFuture,
-            builder: (context, snapshot) {
-              final enabled = snapshot.data ?? true;
-              return Semantics(
-                button: true,
-                label:
-                    enabled
-                        ? 'كتم أذان ${widget.name}'
-                        : 'تفعيل أذان ${widget.name}',
-                child: GestureDetector(
-                  onTap: () => widget.onToggleAdhan(!enabled),
-                  child: Padding(
-                    // 24px icon + 12px padding on every side = 48x48,
-                    // the accessibility minimum touch target.
-                    padding: const EdgeInsets.all(12),
-                    child: Icon(
-                      enabled ? Icons.volume_up : Icons.volume_off,
-                      color: enabled ? contentColor : AppColors.label,
-                    ),
-                  ),
+          Semantics(
+            button: true,
+            label:
+                widget.isAdhanEnabled
+                    ? 'كتم أذان ${widget.name}'
+                    : 'تفعيل أذان ${widget.name}',
+            child: GestureDetector(
+              onTap: () => widget.onToggleAdhan(!widget.isAdhanEnabled),
+              child: Padding(
+                // 24px icon + 12px padding on every side = 48x48,
+                // the accessibility minimum touch target.
+                padding: const EdgeInsets.all(12),
+                child: Icon(
+                  widget.isAdhanEnabled ? Icons.volume_up : Icons.volume_off,
+                  color: widget.isAdhanEnabled ? contentColor : AppColors.label,
                 ),
-              );
-            },
+              ),
+            ),
           ),
         ],
       ),
