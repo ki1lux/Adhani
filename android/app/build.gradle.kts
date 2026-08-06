@@ -49,9 +49,15 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // The app ships one language. Restricting resource configs drops the
-        // ~70 unused translations AppCompat/WorkManager pull in.
-        resourceConfigurations += listOf("ar", "en")
+    }
+
+    // The app ships one language. Restricting locales drops the ~70 unused
+    // translations AppCompat/WorkManager pull in. This lives here rather than
+    // as `defaultConfig.resourceConfigurations`, which AGP deprecated in
+    // favour of `androidResources.localeFilters` (available since AGP 8.10;
+    // this project is on 8.11.1) and removes in AGP 9.
+    androidResources {
+        localeFilters += listOf("ar", "en")
     }
 
     signingConfigs {

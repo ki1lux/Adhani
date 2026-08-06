@@ -656,10 +656,27 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const Icon(
-                                Icons.edit,
-                                color: AppColors.label,
-                                size: 17,
+                              // A small rounded-square badge around the
+                              // pencil rather than a bare glyph floating next
+                              // to the text — reads as a tappable control
+                              // instead of a stray icon, and matches the
+                              // soft-tinted badge treatment used elsewhere
+                              // (e.g. the troubleshoot items in Settings).
+                              Container(
+                                width: 26,
+                                height: 26,
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentFillSoft,
+                                  borderRadius: BorderRadius.circular(9),
+                                  border: Border.all(
+                                    color: AppColors.accentBorderSoft,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.edit,
+                                  color: AppColors.heading,
+                                  size: 14,
+                                ),
                               ),
                             ],
                           ),

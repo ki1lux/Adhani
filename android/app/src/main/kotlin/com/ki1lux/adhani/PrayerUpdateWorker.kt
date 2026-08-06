@@ -319,8 +319,16 @@ class PrayerUpdateWorker(
     }
 
     private fun broadcastWidgetUpdate() {
-        val intent = android.content.Intent("com.ki1lux.adhani.ACTION_PRAYER_UPDATED")
-        intent.setPackage(applicationContext.packageName)
+        // Explicit (component-addressed) for the same reason as
+        // AlarmSchedulerHelper.rescheduleAllFromPrefs — see the comment
+        // there. Delivery doesn't depend on the exported receiver keeping an
+        // <intent-filter> for this action, so no other app can send it.
+        val intent = android.content.Intent(
+            applicationContext,
+            PrayerWidgetProvider::class.java,
+        ).apply {
+            action = "com.ki1lux.adhani.ACTION_PRAYER_UPDATED"
+        }
         applicationContext.sendBroadcast(intent)
     }
 

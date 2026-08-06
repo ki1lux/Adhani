@@ -1,3 +1,8 @@
+// `unawaited` — the real one. A local no-op stub used to shadow it here,
+// which read as fire-and-forget but silently discarded the future without
+// attaching an error handler, so the language's own unawaited-future lint
+// could never see the call either.
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -73,6 +78,19 @@ class MyApp extends ConsumerStatefulWidget {
 }
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
+  /// A context that sits *below* the app's Navigator.
+  ///
+  /// `showDialog` walks **up** from the context it is given looking for a
+  /// Navigator — and this State builds `MaterialApp`, so its own `context` is
+  /// an ancestor of that Navigator, never a descendant. Passing it to the
+  /// location disclosure below threw, and because the throw happened before
+  /// the `fetchPrayerTimes()` on the next line, the provider was left on its
+  /// initial `loading()` state forever: a shimmer that never resolves and has
+  /// no retry. It only bit on installs that hadn't recorded the disclosure —
+  /// i.e. every *fresh* install, which is exactly the path a reviewer and a
+  /// first-time user take.
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
   String _lastFetchDate = '';
 
   /// Identifies the times we last armed alarms for, so an identical re-emit
@@ -175,7 +193,22 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       final seen = await LocationDisclosure.hasBeenShown();
       if (!seen) {
         if (!mounted) return;
-        mayAskForLocation = await LocationDisclosure.show(context);
+        // The Navigator's own context, not this State's — see _navigatorKey.
+        final dialogContext = _navigatorKey.currentContext;
+        // `dialogContext.mounted`, not this State's: they are different
+        // elements with different lifetimes, and it is the one we are about
+        // to hand to showDialog that has to still be in the tree.
+        if (dialogContext != null && dialogContext.mounted) {
+          mayAskForLocation = await LocationDisclosure.show(dialogContext);
+        } else {
+          // No Navigator yet (the splash route hasn't mounted). Falling
+          // through without the disclosure would mean asking for location
+          // without it, which is the Play violation the dialog exists to
+          // avoid — so skip the request this launch and try again next time,
+          // deliberately leaving `location_disclosure_shown` unset.
+          logWarning('Navigator unavailable — deferring location disclosure');
+          mayAskForLocation = false;
+        }
       }
       if (mayAskForLocation) {
         await Permission.locationWhenInUse.request();
@@ -223,6 +256,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navigatorKey,
       title: 'Adhani',
       // The UI is written in Arabic and lays itself out RTL, but nothing ever
       // told Flutter that — so Material's own strings (dialog semantics, the
@@ -270,9 +304,6 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     );
   }
 }
-
-/// Fire-and-forget, spelled out so the intent is obvious at the call site.
-void unawaited(Future<void> future) {}
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});

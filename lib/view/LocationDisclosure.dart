@@ -39,10 +39,21 @@ class LocationDisclosure extends StatelessWidget {
       builder: (_) => const LocationDisclosure(),
     );
 
+    // Only remember it once the user actually answered.
+    //
+    // The barrier isn't dismissible and both buttons pop a real bool, so a
+    // null here doesn't mean "declined" — it means the route was torn down
+    // from outside (the splash screen's pushReplacement landing while this
+    // is on top, or the app being killed). Recording that as "shown" would
+    // retire the disclosure permanently, and since the location request is
+    // gated behind it, the app would never ask for location again on that
+    // install. Leaving the flag unset just asks again next launch.
+    if (accepted == null) return false;
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefsKey, true);
 
-    return accepted ?? false;
+    return accepted;
   }
 
   @override

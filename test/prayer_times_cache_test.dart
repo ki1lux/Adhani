@@ -32,10 +32,26 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  // Anything that goes through `merge` has to use dates relative to now.
+  //
+  // `merge` prunes days older than yesterday on write, so a hardcoded
+  // calendar date is only a valid fixture until the clock passes it — after
+  // which the day under test is pruned during the very write being asserted
+  // on, and the expectation fails with an empty map for reasons that have
+  // nothing to do with the code. Four tests here were written against fixed
+  // July 2026 dates and duly started failing on their own once that date
+  // passed. Tests below that build a `MonthCache` directly (hijriNow, the
+  // fetchMonth parsing) never hit the pruning path, so they keep their fixed
+  // dates deliberately — there the exact calendar date is the point.
+  final todayKey = MonthCache.dayKey(DateTime.now());
+  final tomorrowKey = MonthCache.dayKey(
+    DateTime.now().add(const Duration(days: 1)),
+  );
+
   group('wire format (must match PrayerMonthCache.kt)', () {
     test('writes the exact key and field names Kotlin reads', () async {
       await cache.merge(
-        days: {'2026-07-30': day('04:10')},
+        days: {todayKey: day('04:10')},
         latitude: 36.75,
         longitude: 3.06,
         method: 19,
@@ -52,7 +68,7 @@ void main() {
       expect(decoded.keys, containsAll(<String>['v', 'lat', 'lng', 'method', 'school', 'fetchedAt', 'days']));
 
       final days = decoded['days'] as Map<String, dynamic>;
-      final entry = days['2026-07-30'] as Map<String, dynamic>;
+      final entry = days[todayKey] as Map<String, dynamic>;
       expect(
         entry.keys,
         containsAll(<String>['fajr', 'dhuhr', 'asr', 'maghrib', 'isha', 'hijri']),
@@ -84,33 +100,33 @@ void main() {
   group('coverage and validity', () {
     test('merging keeps existing days for the same place and method', () async {
       await cache.merge(
-        days: {'2026-07-30': day('04:10')},
+        days: {todayKey: day('04:10')},
         latitude: 36.75,
         longitude: 3.06,
         method: 19,
         school: 0,
       );
       final merged = await cache.merge(
-        days: {'2026-07-31': day('04:11')},
+        days: {tomorrowKey: day('04:11')},
         latitude: 36.75,
         longitude: 3.06,
         method: 19,
         school: 0,
       );
 
-      expect(merged.days.keys, containsAll(<String>['2026-07-30', '2026-07-31']));
+      expect(merged.days.keys, containsAll(<String>[todayKey, tomorrowKey]));
     });
 
     test('changing the calculation method discards the old days', () async {
       await cache.merge(
-        days: {'2026-07-30': day('04:10')},
+        days: {todayKey: day('04:10')},
         latitude: 36.75,
         longitude: 3.06,
         method: 19,
         school: 0,
       );
       final merged = await cache.merge(
-        days: {'2026-07-31': day('04:11')},
+        days: {tomorrowKey: day('04:11')},
         latitude: 36.75,
         longitude: 3.06,
         method: 3,
@@ -118,13 +134,13 @@ void main() {
       );
 
       // The old day described a different calculation, not an earlier time.
-      expect(merged.days.keys, <String>['2026-07-31']);
+      expect(merged.days.keys, <String>[tomorrowKey]);
     });
 
     test('moving further than the staleness radius discards the old days',
         () async {
       await cache.merge(
-        days: {'2026-07-30': day('04:10')},
+        days: {todayKey: day('04:10')},
         latitude: 36.75,
         longitude: 3.06,
         method: 19,
@@ -132,14 +148,14 @@ void main() {
       );
       // Algiers → Paris.
       final merged = await cache.merge(
-        days: {'2026-07-31': day('05:20')},
+        days: {tomorrowKey: day('05:20')},
         latitude: 48.85,
         longitude: 2.35,
         method: 19,
         school: 0,
       );
 
-      expect(merged.days.keys, <String>['2026-07-31']);
+      expect(merged.days.keys, <String>[tomorrowKey]);
     });
 
     test('isNear tolerates a small move but not a large one', () {

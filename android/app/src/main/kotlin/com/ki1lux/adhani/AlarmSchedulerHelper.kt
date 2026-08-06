@@ -282,9 +282,18 @@ object AlarmSchedulerHelper {
 
         Log.d(TAG, "Rescheduled $scheduledCount alarms from SharedPreferences")
 
-        // Notify Home Screen Widget to update
-        val intent = Intent("com.ki1lux.adhani.ACTION_PRAYER_UPDATED")
-        intent.setPackage(context.packageName)
+        // Notify Home Screen Widget to update.
+        //
+        // Addressed to the component, not by action + setPackage. An
+        // action-only intent needs a matching <intent-filter> to be
+        // delivered, and that filter — on a receiver the launcher forces us
+        // to export — is what let any installed app broadcast this same
+        // action at us. Naming the class delivers regardless of the filter,
+        // so the filter can drop the custom action entirely. The action is
+        // still set because PrayerWidgetProvider.onReceive switches on it.
+        val intent = Intent(context, PrayerWidgetProvider::class.java).apply {
+            action = "com.ki1lux.adhani.ACTION_PRAYER_UPDATED"
+        }
         context.sendBroadcast(intent)
     }
 

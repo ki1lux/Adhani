@@ -159,9 +159,16 @@
             android:name=".PrayerWidgetProvider"
             android:exported="true"
             android:label="@string/widget_label">
+            <!-- APPWIDGET_UPDATE only. ACTION_PRAYER_UPDATED used to be
+                 listed here too, which meant any installed app could
+                 broadcast it and drive this receiver — the one third-party
+                 reachable surface in the app. Every sender of it is now
+                 component-addressed (AlarmSchedulerHelper, PrayerUpdateWorker
+                 and the per-prayer widget-refresh PendingIntents), and an
+                 explicit intent is delivered without needing a filter to
+                 match, so nothing is lost by not advertising it. -->
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.ki1lux.adhani.ACTION_PRAYER_UPDATED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
