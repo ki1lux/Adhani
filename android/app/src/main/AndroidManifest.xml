@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ── Permissions ──────────────────────────────────────────────────
          Every permission below is exercised by code in this app. Anything
@@ -135,6 +136,23 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Live countdown to the next prayer time, shown as an ongoing notification the user can disable in the app's settings." />
         </service>
+
+        <!-- geolocator declares this service with
+             android:foregroundServiceType="location", which the manifest
+             merger pulls into ours. This app never uses foreground location:
+             it calls getCurrentPosition/getLastKnownPosition while in use and
+             passes no foregroundNotificationConfig, so the service is only
+             ever bound, never promoted with startForeground(). Leaving the
+             type in place advertises a location foreground service that we
+             deliberately hold no FOREGROUND_SERVICE_LOCATION permission for —
+             an inconsistency a Play reviewer or an automated manifest scan
+             reads as undeclared background-location use. Stripping the
+             attribute (not the service — geolocator binds to it, so removing
+             the node would break location entirely) makes the manifest say
+             what the app actually does. -->
+        <service
+            android:name="com.baseflow.geolocator.GeolocatorLocationService"
+            tools:remove="android:foregroundServiceType" />
 
         <!-- Home Screen Widget. Exported because the launcher binds it. -->
         <receiver

@@ -77,7 +77,8 @@ class _TapScaleState extends State<_TapScale> {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: widget.onTap == null ? null : (_) => setState(() => _pressed = true),
+      onTapDown:
+          widget.onTap == null ? null : (_) => setState(() => _pressed = true),
       onTapUp:
           widget.onTap == null
               ? null
@@ -565,45 +566,45 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
         // the shared navy glow gradient and diagonal pattern overlay.
         body: AppBackground(
           child: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // Same reasoning as the Home screen: give some of the
-                  // leftover space to the top instead of dumping all of it
-                  // below the last row — capped so it doesn't overcorrect
-                  // into an odd gap on very tall screens/tablets.
-                  final topSpacing = (constraints.maxHeight * 0.04).clamp(
-                    16.0,
-                    36.0,
-                  );
-                  return SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        SizedBox(height: topSpacing),
-                        _buildLocationHeader(),
-                        // Says these times came from the cache, without
-                        // hiding them. Collapses to nothing when we're synced.
-                        const OfflineBanner(),
-                        const SizedBox(height: 16),
-                        _buildDivider(),
-                        const SizedBox(height: 20),
-                        ...prayers.asMap().entries.map(
-                          (e) => _buildPrayerCard(
-                            e.value.name,
-                            e.value.time,
-                            e.key == nextIndex,
-                            e.key < nextIndex,
-                          ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Same reasoning as the Home screen: give some of the
+                // leftover space to the top instead of dumping all of it
+                // below the last row — capped so it doesn't overcorrect
+                // into an odd gap on very tall screens/tablets.
+                final topSpacing = (constraints.maxHeight * 0.04).clamp(
+                  16.0,
+                  36.0,
+                );
+                return SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      SizedBox(height: topSpacing),
+                      _buildLocationHeader(),
+                      // Says these times came from the cache, without
+                      // hiding them. Collapses to nothing when we're synced.
+                      const OfflineBanner(),
+                      const SizedBox(height: 16),
+                      _buildDivider(),
+                      const SizedBox(height: 20),
+                      ...prayers.asMap().entries.map(
+                        (e) => _buildPrayerCard(
+                          e.value.name,
+                          e.value.time,
+                          e.key == nextIndex,
+                          e.key < nextIndex,
                         ),
-                        const SizedBox(height: 12),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 
   Widget _buildLocationHeader() {
@@ -621,10 +622,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
             label: 'تغيير الموقع، $_cityText، $_countryText',
             child: ExcludeSemantics(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 8,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -727,279 +725,295 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
           (context, animation, secondaryAnimation) => _noInk(
             context,
             StatefulBuilder(
-            builder:
-                (context, setDialogState) => AlertDialog(
-                  backgroundColor: AppColors.sheetBottom,
-                  // Material 3 applies a default tinted overlay on dialogs
-                  // unless explicitly disabled — without this, the same
-                  // background color can render slightly differently
-                  // depending on context, which is why the two dialogs
-                  // didn't actually match despite using the same hex.
-                  surfaceTintColor: Colors.transparent,
-                  shape: _dialogShape,
-                  title: const Text(
-                    'تغيير الموقع',
-                    style: TextStyle(
-                      color: AppColors.body,
-                      fontFamily: 'cairo',
-                      fontWeight: FontWeight.w700,
-                      fontSize: 20,
+              builder:
+                  (context, setDialogState) => AlertDialog(
+                    backgroundColor: AppColors.sheetBottom,
+                    // Material 3 applies a default tinted overlay on dialogs
+                    // unless explicitly disabled — without this, the same
+                    // background color can render slightly differently
+                    // depending on context, which is why the two dialogs
+                    // didn't actually match despite using the same hex.
+                    surfaceTintColor: Colors.transparent,
+                    shape: _dialogShape,
+                    title: const Text(
+                      'تغيير الموقع',
+                      style: TextStyle(
+                        color: AppColors.body,
+                        fontFamily: 'cairo',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 20,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                  content: Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.5,
-                    ),
-                    child: SizedBox(
-                      width: double.maxFinite,
-                      child: SingleChildScrollView(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(height: 24),
-                            TextField(
-                              controller: cityController,
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(color: AppColors.body),
-                              decoration: InputDecoration(
-                                hintText: 'أدخل اسم المدينة (بالإنجليزية)',
-                                hintStyle: const TextStyle(
-                                  color: AppColors.secondary,
-                                  fontFamily: 'cairo',
-                                  fontSize: 16,
-                                ),
-                                suffixIcon:
-                                    isSearching
-                                        ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: Padding(
-                                            padding: EdgeInsets.all(12),
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 1,
-                                              color: AppColors.secondary,
-                                            ),
-                                          ),
-                                        )
-                                        : null,
-                                enabledBorder: const UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: AppColors.label,
-                                  ),
-                                ),
-                                focusedBorder: const UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: AppColors.body,
-                                  ),
-                                ),
-                              ),
-                              onChanged: (value) {
-                                debounceTimer?.cancel();
-                                if (value.length < 3) {
-                                  setDialogState(() => suggestions = []);
-                                  return;
-                                }
-                                debounceTimer = Timer(
-                                  const Duration(milliseconds: 400),
-                                  () async {
-                                    setDialogState(() => isSearching = true);
-                                    try {
-                                      // Use Nominatim API for better city suggestions
-                                      final uri = Uri.parse(
-                                        'https://nominatim.openstreetmap.org/search?q=$value&format=json&limit=5&addressdetails=1&accept-language=ar',
-                                      );
-                                      final response = await http
-                                          .get(uri, headers: _nominatimHeaders)
-                                          .timeout(_geocodeTimeout);
-                                      if (!context.mounted) return;
-                                      if (response.statusCode == 200) {
-                                        final List<dynamic> data = json.decode(
-                                          response.body,
-                                        );
-                                        final List<Map<String, dynamic>>
-                                        results =
-                                            data.map((item) {
-                                              final address =
-                                                  item['address']
-                                                      as Map<String, dynamic>? ??
-                                                  {};
-                                              final city =
-                                                  address['city'] as String? ??
-                                                  address['town']
-                                                      as String? ??
-                                                  address['village']
-                                                      as String? ??
-                                                  address['state']
-                                                      as String? ??
-                                                  (item['display_name']
-                                                          as String)
-                                                      .split(',')
-                                                      .first
-                                                      .trim();
-                                              final country =
-                                                  address['country']
-                                                      as String? ??
-                                                  '';
-                                              return {
-                                                'city': city,
-                                                'country': country,
-                                                'lat': double.parse(
-                                                  item['lat'] as String,
-                                                ),
-                                                'lon': double.parse(
-                                                  item['lon'] as String,
-                                                ),
-                                              };
-                                            }).toList();
-                                        setDialogState(() {
-                                          suggestions = results;
-                                          isSearching = false;
-                                        });
-                                      } else {
-                                        setDialogState(() {
-                                          suggestions = [];
-                                          isSearching = false;
-                                        });
-                                      }
-                                    } catch (e) {
-                                      if (!context.mounted) return;
-                                      setDialogState(() {
-                                        suggestions = [];
-                                        isSearching = false;
-                                      });
-                                      // An empty list used to be the only
-                                      // signal here, so "we can't reach the
-                                      // search service" looked exactly like
-                                      // "no city by that name" — and the user
-                                      // retyped their own city over and over.
-                                      AppToast.error(
-                                        context,
-                                        'تعذّر البحث عن المدينة',
-                                        detail: 'تحقّق من اتصالك بالشبكة ثم أعد المحاولة',
-                                      );
-                                      debugPrint('City search failed: $e');
-                                    }
-                                  },
-                                );
-                              },
-                            ),
-                            if (suggestions.isNotEmpty) ...[
-                              const SizedBox(height: 18),
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxHeight: 200,
-                                ),
-                                child: ListView.builder(
-                                  shrinkWrap: true,
-                                  itemCount: suggestions.length,
-                                  itemBuilder: (context, index) {
-                                    final loc = suggestions[index];
-                                    final cityName = loc['city'] as String;
-                                    final countryName =
-                                        loc['country'] as String;
-                                    return _TapScale(
-                                      onTap: () async {
-                                        Navigator.pop(context);
-                                        final lat = loc['lat'] as double;
-                                        final lon = loc['lon'] as double;
-                                        // Save location and names
-                                        final prefs =
-                                            await SharedPreferences.getInstance();
-                                        await prefs.setDouble(
-                                          'last_latitude',
-                                          lat,
-                                        );
-                                        await prefs.setDouble(
-                                          'last_longitude',
-                                          lon,
-                                        );
-                                        await prefs.setString(
-                                          'country_name',
-                                          countryName,
-                                        );
-                                        await prefs.setString(
-                                          'city_name',
-                                          cityName,
-                                        );
-
-                                        _updateLocation(countryName, cityName);
-                                        ref
-                                            .read(prayerTimesProvider.notifier)
-                                            .fetchPrayerTimes(
-                                              lat: lat,
-                                              lng: lon,
-                                            );
-                                      },
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 10,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.location_on,
-                                              color: AppColors.secondary,
-                                              size: 20,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Text(
-                                                '$cityName، $countryName',
-                                                style: const TextStyle(
-                                                  color: AppColors.body,
-                                                  fontFamily: 'cairo',
-                                                  fontSize: 14,
-                                                ),
-                                                maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
+                    content: Directionality(
+                      textDirection: TextDirection.rtl,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.5,
+                        ),
+                        child: SizedBox(
+                          width: double.maxFinite,
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(height: 24),
+                                TextField(
+                                  controller: cityController,
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(color: AppColors.body),
+                                  decoration: InputDecoration(
+                                    hintText: 'أدخل اسم المدينة (بالإنجليزية)',
+                                    hintStyle: const TextStyle(
+                                      color: AppColors.secondary,
+                                      fontFamily: 'cairo',
+                                      fontSize: 16,
+                                    ),
+                                    suffixIcon:
+                                        isSearching
+                                            ? const SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: Padding(
+                                                padding: EdgeInsets.all(12),
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 1,
+                                                      color:
+                                                          AppColors.secondary,
+                                                    ),
                                               ),
-                                            ),
-                                          ],
-                                        ),
+                                            )
+                                            : null,
+                                    enabledBorder: const UnderlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: AppColors.label,
                                       ),
+                                    ),
+                                    focusedBorder: const UnderlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: AppColors.body,
+                                      ),
+                                    ),
+                                  ),
+                                  onChanged: (value) {
+                                    debounceTimer?.cancel();
+                                    if (value.length < 3) {
+                                      setDialogState(() => suggestions = []);
+                                      return;
+                                    }
+                                    debounceTimer = Timer(
+                                      const Duration(milliseconds: 400),
+                                      () async {
+                                        setDialogState(
+                                          () => isSearching = true,
+                                        );
+                                        try {
+                                          // Use Nominatim API for better city suggestions
+                                          final uri = Uri.parse(
+                                            'https://nominatim.openstreetmap.org/search?q=$value&format=json&limit=5&addressdetails=1&accept-language=ar',
+                                          );
+                                          final response = await http
+                                              .get(
+                                                uri,
+                                                headers: _nominatimHeaders,
+                                              )
+                                              .timeout(_geocodeTimeout);
+                                          if (!context.mounted) return;
+                                          if (response.statusCode == 200) {
+                                            final List<dynamic> data = json
+                                                .decode(response.body);
+                                            final List<Map<String, dynamic>>
+                                            results =
+                                                data.map((item) {
+                                                  final address =
+                                                      item['address']
+                                                          as Map<
+                                                            String,
+                                                            dynamic
+                                                          >? ??
+                                                      {};
+                                                  final city =
+                                                      address['city']
+                                                          as String? ??
+                                                      address['town']
+                                                          as String? ??
+                                                      address['village']
+                                                          as String? ??
+                                                      address['state']
+                                                          as String? ??
+                                                      (item['display_name']
+                                                              as String)
+                                                          .split(',')
+                                                          .first
+                                                          .trim();
+                                                  final country =
+                                                      address['country']
+                                                          as String? ??
+                                                      '';
+                                                  return {
+                                                    'city': city,
+                                                    'country': country,
+                                                    'lat': double.parse(
+                                                      item['lat'] as String,
+                                                    ),
+                                                    'lon': double.parse(
+                                                      item['lon'] as String,
+                                                    ),
+                                                  };
+                                                }).toList();
+                                            setDialogState(() {
+                                              suggestions = results;
+                                              isSearching = false;
+                                            });
+                                          } else {
+                                            setDialogState(() {
+                                              suggestions = [];
+                                              isSearching = false;
+                                            });
+                                          }
+                                        } catch (e) {
+                                          if (!context.mounted) return;
+                                          setDialogState(() {
+                                            suggestions = [];
+                                            isSearching = false;
+                                          });
+                                          // An empty list used to be the only
+                                          // signal here, so "we can't reach the
+                                          // search service" looked exactly like
+                                          // "no city by that name" — and the user
+                                          // retyped their own city over and over.
+                                          AppToast.error(
+                                            context,
+                                            'تعذّر البحث عن المدينة',
+                                            detail:
+                                                'تحقّق من اتصالك بالشبكة ثم أعد المحاولة',
+                                          );
+                                          logWarning('City search failed', e);
+                                        }
+                                      },
                                     );
                                   },
                                 ),
-                              ),
-                            ],
-                            const SizedBox(height: 24),
-                            _dialogPrimaryButton(
-                              label: 'استخدم GPS',
-                              icon: Icons.my_location,
-                              onTap: () {
-                                Navigator.pop(context);
-                                _loadLocation();
-                              },
+                                if (suggestions.isNotEmpty) ...[
+                                  const SizedBox(height: 18),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxHeight: 200,
+                                    ),
+                                    child: ListView.builder(
+                                      shrinkWrap: true,
+                                      itemCount: suggestions.length,
+                                      itemBuilder: (context, index) {
+                                        final loc = suggestions[index];
+                                        final cityName = loc['city'] as String;
+                                        final countryName =
+                                            loc['country'] as String;
+                                        return _TapScale(
+                                          onTap: () async {
+                                            Navigator.pop(context);
+                                            final lat = loc['lat'] as double;
+                                            final lon = loc['lon'] as double;
+                                            // Save location and names
+                                            final prefs =
+                                                await SharedPreferences.getInstance();
+                                            await prefs.setDouble(
+                                              'last_latitude',
+                                              lat,
+                                            );
+                                            await prefs.setDouble(
+                                              'last_longitude',
+                                              lon,
+                                            );
+                                            await prefs.setString(
+                                              'country_name',
+                                              countryName,
+                                            );
+                                            await prefs.setString(
+                                              'city_name',
+                                              cityName,
+                                            );
+
+                                            _updateLocation(
+                                              countryName,
+                                              cityName,
+                                            );
+                                            ref
+                                                .read(
+                                                  prayerTimesProvider.notifier,
+                                                )
+                                                .fetchPrayerTimes(
+                                                  lat: lat,
+                                                  lng: lon,
+                                                );
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.location_on,
+                                                  color: AppColors.secondary,
+                                                  size: 20,
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Text(
+                                                    '$cityName، $countryName',
+                                                    style: const TextStyle(
+                                                      color: AppColors.body,
+                                                      fontFamily: 'cairo',
+                                                      fontSize: 14,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 24),
+                                _dialogPrimaryButton(
+                                  label: 'استخدم GPS',
+                                  icon: Icons.my_location,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _loadLocation();
+                                  },
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
+                    actions: [
+                      _dialogTextAction(
+                        label: 'إلغاء',
+                        onTap: () => Navigator.pop(context),
+                      ),
+                      _dialogTextAction(
+                        label: 'بحث',
+                        color: AppColors.body,
+                        weight: FontWeight.w600,
+                        onTap: () async {
+                          final city = cityController.text.trim();
+                          if (city.isNotEmpty) {
+                            Navigator.pop(context);
+                            await _searchAndSetLocation(city);
+                          }
+                        },
+                      ),
+                    ],
                   ),
-                  ),
-                  actions: [
-                    _dialogTextAction(
-                      label: 'إلغاء',
-                      onTap: () => Navigator.pop(context),
-                    ),
-                    _dialogTextAction(
-                      label: 'بحث',
-                      color: AppColors.body,
-                      weight: FontWeight.w600,
-                      onTap: () async {
-                        final city = cityController.text.trim();
-                        if (city.isNotEmpty) {
-                          Navigator.pop(context);
-                          await _searchAndSetLocation(city);
-                        }
-                      },
-                    ),
-                  ],
-                ),
             ),
           ),
     ).then((_) {
@@ -1019,8 +1033,9 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
     try {
       // Search for city coordinates using geocoding. On Android this is the
       // platform Geocoder, which is network-backed — hence the timeout.
-      final locations =
-          await locationFromAddress(cityName).timeout(_geocodeTimeout);
+      final locations = await locationFromAddress(
+        cityName,
+      ).timeout(_geocodeTimeout);
       if (locations.isNotEmpty) {
         final location = locations.first;
 
@@ -1047,7 +1062,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
             _updateLocation(cityName, '');
           }
         } catch (e) {
-          debugPrint('Placemark lookup failed, using typed name: $e');
+          logWarning('Placemark lookup failed, using typed name', e);
           _updateLocation(cityName, '');
         }
 
@@ -1069,7 +1084,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
       // The failure used to be written into the country slot, so the header
       // read "خطأ في البحث" as though that were a place — permanently, with no
       // way to retry. Say it in a toast and put the real label back.
-      debugPrint('City lookup failed: $e');
+      logWarning('City lookup failed', e);
       _restoreLocationLabel();
       if (mounted) {
         AppToast.error(
@@ -1138,11 +1153,20 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
     // `previewAdhan`.
     String? playingSound;
 
-    // Available sounds - add more as you add mp3 files
+    // Seven recordings from aladhan.com/download-adhans (Islamic Network),
+    // replacing the previous three whose provenance wasn't documented. The
+    // 'id' is also the literal Android raw-resource name — it's read back
+    // directly by RawResourceAndroidNotificationSound in
+    // prayer_alarm_scheduler.dart's fallback path, not just through
+    // AdhanPlayer.getSoundResId's mapping, so the two must stay identical.
     final sounds = [
-      {'id': 'adhan1', 'name': 'الأذان الأول'},
-      {'id': 'adhan2', 'name': 'أذان الثاني'},
-      {'id': 'adhan3', 'name': 'أذان الثالث'},
+      {'id': 'adhan1', 'name': 'مشاري راشد العفاسي'},
+      {'id': 'adhan2', 'name': 'أحمد النفيس'},
+      {'id': 'adhan3', 'name': 'حافظ مصطفى أوزجان'},
+      {'id': 'adhan4', 'name': 'كارل جينكينز'},
+      {'id': 'adhan5', 'name': 'مشاري العفاسي — قناة وان دبي'},
+      {'id': 'adhan6', 'name': 'مشاري العفاسي — أذان آخر'},
+      {'id': 'adhan7', 'name': 'منصور الزهراني'},
     ];
 
     showGeneralDialog(
@@ -1156,257 +1180,279 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
           (context, animation, secondaryAnimation) => _noInk(
             context,
             StatefulBuilder(
-            builder:
-                (context, setDialogState) => AlertDialog(
-                  backgroundColor: AppColors.sheetBottom,
-                  // Material 3 applies a default tinted overlay on dialogs
-                  // unless explicitly disabled — without this, the same
-                  // background color can render slightly differently
-                  // depending on context, which is why the two dialogs
-                  // didn't actually match despite using the same hex.
-                  surfaceTintColor: Colors.transparent,
-                  shape: _dialogShape,
-                  title: Text(
-                    'اشعار $prayerName',
-                    style: const TextStyle(
-                      color: AppColors.body,
-                      fontFamily: 'cairo',
-                      fontWeight: FontWeight.w700,
-                      fontSize: 20,
+              builder:
+                  (context, setDialogState) => AlertDialog(
+                    backgroundColor: AppColors.sheetBottom,
+                    // Material 3 applies a default tinted overlay on dialogs
+                    // unless explicitly disabled — without this, the same
+                    // background color can render slightly differently
+                    // depending on context, which is why the two dialogs
+                    // didn't actually match despite using the same hex.
+                    surfaceTintColor: Colors.transparent,
+                    shape: _dialogShape,
+                    title: Text(
+                      'اشعار $prayerName',
+                      style: const TextStyle(
+                        color: AppColors.body,
+                        fontFamily: 'cairo',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 20,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                  content: Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: SizedBox(
-                      width: double.maxFinite,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Enable/Disable toggle — tapping the label
-                          // toggles too, but isn't nested inside the same
-                          // tap target as the switch itself.
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _TapScale(
-                                  onTap:
-                                      () => setDialogState(
-                                        () => isEnabled = !isEnabled,
-                                      ),
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: 8,
-                                    ),
-                                    child: Text(
-                                      'تفعيل الأذان',
-                                      style: TextStyle(
-                                        color: AppColors.body,
-                                        fontFamily: 'cairo',
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Switch(
-                                value: isEnabled,
-                                activeThumbColor: AppColors.accent,
-                                // Switch draws its press/hover state from
-                                // overlayColor, which the theme-level splash
-                                // override doesn't reach — this is the large
-                                // pale halo that appears around the thumb.
-                                overlayColor: const WidgetStatePropertyAll(
-                                  Colors.transparent,
-                                ),
-                                onChanged: (value) {
-                                  setDialogState(() => isEnabled = value);
-                                },
-                              ),
-                            ],
-                          ),
-                          const Divider(color: AppColors.cardBorder),
-                          const SizedBox(height: 4),
-                          // Sound selection
-                          const Text(
-                            'اختر نغمة الأذان',
-                            style: TextStyle(
-                              color: AppColors.secondary,
-                              fontFamily: 'cairo',
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          ...sounds.map((sound) {
-                            final isSelected = selectedSound == sound['id'];
-                            final isPlaying = playingSound == sound['id'];
-                            return _TapScale(
-                              onTap:
-                                  isEnabled
-                                      ? () => setDialogState(
-                                        () => selectedSound = sound['id']!,
-                                      )
-                                      : null,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
-                                ),
-                                child: Row(
+                    content: Directionality(
+                      textDirection: TextDirection.rtl,
+                      // Bounded + scrollable: the list below grew from 3 rows to
+                      // 7 (all seven aladhan.com/download-adhans recordings), and
+                      // 7 no longer reliably fits an unscrollable AlertDialog
+                      // content on shorter screens the way 3 did. Same pattern
+                      // as the location dialog above.
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.6,
+                        ),
+                        child: SizedBox(
+                          width: double.maxFinite,
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Enable/Disable toggle — tapping the label
+                                // toggles too, but isn't nested inside the same
+                                // tap target as the switch itself.
+                                Row(
                                   children: [
-                                    Container(
-                                      width: 22,
-                                      height: 22,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color:
-                                            isSelected
-                                                ? AppColors.accent
-                                                : Colors.transparent,
-                                        border: Border.all(
-                                          color:
-                                              isSelected
-                                                  ? AppColors.accent
-                                                  : AppColors.label,
-                                          width: 2,
-                                        ),
-                                      ),
-                                      child:
-                                          isSelected
-                                              ? const Icon(
-                                                Icons.check,
-                                                size: 14,
-                                                color: AppColors.surface,
-                                              )
-                                              : null,
-                                    ),
-                                    const SizedBox(width: 14),
                                     Expanded(
-                                      child: Text(
-                                        sound['name']!,
-                                        style: TextStyle(
-                                          color:
-                                              isEnabled
-                                                  ? AppColors.body
-                                                  : AppColors.label,
-                                          fontFamily: 'cairo',
-                                          fontSize: 16,
+                                      child: _TapScale(
+                                        onTap:
+                                            () => setDialogState(
+                                              () => isEnabled = !isEnabled,
+                                            ),
+                                        child: const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 8,
+                                          ),
+                                          child: Text(
+                                            'تفعيل الأذان',
+                                            style: TextStyle(
+                                              color: AppColors.body,
+                                              fontFamily: 'cairo',
+                                              fontSize: 16,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                    _TapScale(
-                                      onTap: () async {
-                                        if (isPlaying) {
-                                          await _stopPreview();
-                                          setDialogState(
-                                            () => playingSound = null,
-                                          );
-                                        } else {
-                                          setDialogState(
-                                            () => playingSound = sound['id'],
-                                          );
-                                          await _playPreview(sound['id']!);
-                                        }
+                                    Switch(
+                                      value: isEnabled,
+                                      activeThumbColor: AppColors.accent,
+                                      // Switch draws its press/hover state from
+                                      // overlayColor, which the theme-level splash
+                                      // override doesn't reach — this is the large
+                                      // pale halo that appears around the thumb.
+                                      overlayColor:
+                                          const WidgetStatePropertyAll(
+                                            Colors.transparent,
+                                          ),
+                                      onChanged: (value) {
+                                        setDialogState(() => isEnabled = value);
                                       },
-                                      child: Padding(
-                                        // 22px icon + 13px padding on every
-                                        // side = 48x48, the accessibility
-                                        // minimum touch target — smaller
-                                        // icon, same tap area.
-                                        padding: const EdgeInsets.all(13),
-                                        child: Icon(
-                                          isPlaying
-                                              ? Icons.stop_circle_outlined
-                                              : Icons.play_circle_outline,
-                                          color: AppColors.body,
-                                          size: 22,
-                                        ),
-                                      ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            );
-                          }),
-                        ],
+                                const Divider(color: AppColors.cardBorder),
+                                const SizedBox(height: 4),
+                                // Sound selection
+                                const Text(
+                                  'اختر نغمة الأذان',
+                                  style: TextStyle(
+                                    color: AppColors.secondary,
+                                    fontFamily: 'cairo',
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                ...sounds.map((sound) {
+                                  final isSelected =
+                                      selectedSound == sound['id'];
+                                  final isPlaying = playingSound == sound['id'];
+                                  return _TapScale(
+                                    onTap:
+                                        isEnabled
+                                            ? () => setDialogState(
+                                              () =>
+                                                  selectedSound = sound['id']!,
+                                            )
+                                            : null,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 22,
+                                            height: 22,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color:
+                                                  isSelected
+                                                      ? AppColors.accent
+                                                      : Colors.transparent,
+                                              border: Border.all(
+                                                color:
+                                                    isSelected
+                                                        ? AppColors.accent
+                                                        : AppColors.label,
+                                                width: 2,
+                                              ),
+                                            ),
+                                            child:
+                                                isSelected
+                                                    ? const Icon(
+                                                      Icons.check,
+                                                      size: 14,
+                                                      color: AppColors.surface,
+                                                    )
+                                                    : null,
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Text(
+                                              sound['name']!,
+                                              style: TextStyle(
+                                                color:
+                                                    isEnabled
+                                                        ? AppColors.body
+                                                        : AppColors.label,
+                                                fontFamily: 'cairo',
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                          ),
+                                          _TapScale(
+                                            onTap: () async {
+                                              if (isPlaying) {
+                                                await _stopPreview();
+                                                setDialogState(
+                                                  () => playingSound = null,
+                                                );
+                                              } else {
+                                                setDialogState(
+                                                  () =>
+                                                      playingSound =
+                                                          sound['id'],
+                                                );
+                                                await _playPreview(
+                                                  sound['id']!,
+                                                );
+                                              }
+                                            },
+                                            child: Padding(
+                                              // 22px icon + 13px padding on every
+                                              // side = 48x48, the accessibility
+                                              // minimum touch target — smaller
+                                              // icon, same tap area.
+                                              padding: const EdgeInsets.all(13),
+                                              child: Icon(
+                                                isPlaying
+                                                    ? Icons.stop_circle_outlined
+                                                    : Icons.play_circle_outline,
+                                                color: AppColors.body,
+                                                size: 22,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  actions: [
-                    _dialogTextAction(
-                      label: 'إلغاء',
-                      onTap: () => Navigator.pop(context),
-                    ),
-                    _dialogTextAction(
-                      label: 'تطبيق للكل',
-                      color: AppColors.body,
-                      weight: FontWeight.w600,
-                      onTap: () async {
-                        Navigator.pop(context);
-                        await _stopPreview();
-                        for (final name in _prayerNames) {
-                          await prefs.setBool('adhan_enabled_$name', isEnabled);
+                    actions: [
+                      _dialogTextAction(
+                        label: 'إلغاء',
+                        onTap: () => Navigator.pop(context),
+                      ),
+                      _dialogTextAction(
+                        label: 'تطبيق للكل',
+                        color: AppColors.body,
+                        weight: FontWeight.w600,
+                        onTap: () async {
+                          Navigator.pop(context);
+                          await _stopPreview();
+                          for (final name in _prayerNames) {
+                            await prefs.setBool(
+                              'adhan_enabled_$name',
+                              isEnabled,
+                            );
+                            await prefs.setString(
+                              'adhan_sound_$name',
+                              selectedSound,
+                            );
+                          }
+                          await _rescheduleAfterSoundChange();
+                          if (!mounted) return;
+                          await _refreshAdhanFlags();
+                          if (!mounted) return;
+                          AppToast.success(
+                            // The screen's context, not the dialog's: the
+                            // dialog has just been popped, so posting a
+                            // SnackBar through its Navigator did nothing.
+                            this.context,
+                            'تم تطبيق الإعدادات على جميع الصلوات',
+                          );
+                        },
+                      ),
+                      // The primary action — same filled-accent language as
+                      // the location dialog's GPS button, instead of one
+                      // dialog having a bright CTA and the other only text.
+                      _dialogPrimaryButton(
+                        label: 'حفظ',
+                        onTap: () async {
+                          Navigator.pop(context);
+                          await _stopPreview();
+                          await prefs.setBool(
+                            'adhan_enabled_$prayerName',
+                            isEnabled,
+                          );
                           await prefs.setString(
-                            'adhan_sound_$name',
+                            'adhan_sound_$prayerName',
                             selectedSound,
                           );
-                        }
-                        await _rescheduleAfterSoundChange();
-                        if (!mounted) return;
-                        await _refreshAdhanFlags();
-                        if (!mounted) return;
-                        AppToast.success(
-                          // The screen's context, not the dialog's: the
-                          // dialog has just been popped, so posting a
-                          // SnackBar through its Navigator did nothing.
-                          this.context,
-                          'تم تطبيق الإعدادات على جميع الصلوات',
-                        );
-                      },
-                    ),
-                    // The primary action — same filled-accent language as
-                    // the location dialog's GPS button, instead of one
-                    // dialog having a bright CTA and the other only text.
-                    _dialogPrimaryButton(
-                      label: 'حفظ',
-                      onTap: () async {
-                        Navigator.pop(context);
-                        await _stopPreview();
-                        await prefs.setBool(
-                          'adhan_enabled_$prayerName',
-                          isEnabled,
-                        );
-                        await prefs.setString(
-                          'adhan_sound_$prayerName',
-                          selectedSound,
-                        );
 
-                        await _rescheduleAfterSoundChange();
-                        if (!mounted) return;
-                        // Refresh UI to show icon change
-                        await _refreshAdhanFlags();
-                        if (!mounted) return;
+                          await _rescheduleAfterSoundChange();
+                          if (!mounted) return;
+                          // Refresh UI to show icon change
+                          await _refreshAdhanFlags();
+                          if (!mounted) return;
 
-                        // Saving used to close the dialog silently, leaving
-                        // no confirmation that anything was stored. State
-                        // the consequence, not just the outcome.
-                        final soundName =
-                            sounds.firstWhere(
-                                  (s) => s['id'] == selectedSound,
-                                  orElse: () => sounds.first,
-                                )['name'] ??
-                            '';
-                        AppToast.success(
-                          this.context,
-                          'تم حفظ الإعدادات',
-                          detail:
-                              isEnabled
-                                  ? 'سيؤذّن $prayerName بنغمة «$soundName»'
-                                  : 'تم كتم أذان $prayerName',
-                        );
-                      },
-                    ),
-                  ],
-                ),
+                          // Saving used to close the dialog silently, leaving
+                          // no confirmation that anything was stored. State
+                          // the consequence, not just the outcome.
+                          final soundName =
+                              sounds.firstWhere(
+                                (s) => s['id'] == selectedSound,
+                                orElse: () => sounds.first,
+                              )['name'] ??
+                              '';
+                          AppToast.success(
+                            this.context,
+                            'تم حفظ الإعدادات',
+                            detail:
+                                isEnabled
+                                    ? 'سيؤذّن $prayerName بنغمة «$soundName»'
+                                    : 'تم كتم أذان $prayerName',
+                          );
+                        },
+                      ),
+                    ],
+                  ),
             ),
           ),
     ).then((_) {

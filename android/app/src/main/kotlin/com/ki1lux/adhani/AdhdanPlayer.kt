@@ -104,9 +104,13 @@ object AdhanPlayer {
      */
     fun getSoundResId(context: Context, soundName: String): Int {
         return when (soundName) {
+            "adhan1" -> R.raw.adhan1
             "adhan2" -> R.raw.adhan2
             "adhan3" -> R.raw.adhan3
-            "adhan1" -> R.raw.adhan1
+            "adhan4" -> R.raw.adhan4
+            "adhan5" -> R.raw.adhan5
+            "adhan6" -> R.raw.adhan6
+            "adhan7" -> R.raw.adhan7
             else -> R.raw.adhan1
         }
     }

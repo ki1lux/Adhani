@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:myadhan/services/app_exception.dart';
+import 'package:myadhan/services/app_logger.dart';
 import 'package:myadhan/theme/app_colors.dart';
 import 'package:myadhan/view/AppBackground.dart';
 
@@ -21,9 +22,12 @@ class AppErrorView extends StatelessWidget {
     final e = AppException.from(error);
     final (icon, title, detail) = _copyFor(e.kind);
 
-    // The technical text still needs to reach a bug report — it just must
-    // never reach the screen.
-    debugPrint('AppErrorView: ${e.debugMessage}');
+    // The technical text must never reach the screen, and `debugPrint` is not
+    // stripped from release builds — so this ran on every rebuild of an error
+    // state on real devices, printing whatever the underlying exception
+    // carried (a failed request's URL includes the user's coordinates).
+    // `logDebug` compiles the argument out of release entirely.
+    logDebug('AppErrorView: ${e.debugMessage}');
 
     return Scaffold(
       backgroundColor: AppColors.surface,

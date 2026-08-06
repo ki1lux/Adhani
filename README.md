@@ -37,7 +37,7 @@ month.
   the alarms re-arm themselves every time one fires, so they never run out.
   Falls back to an inexact alarm if you decline the exact-alarm permission,
   rather than going silent.
-- **Three Adhan recordings** — chosen per prayer, played on the alarm audio
+- **Seven Adhan recordings** — chosen per prayer, played on the alarm audio
   stream so notification sounds can't duck them. Preview each one in settings.
 - **Live countdown notification** — an ongoing notification counting down to
   the next prayer, and up through the Iqamah window after it. Can be switched
@@ -234,6 +234,20 @@ a PR.
 - Prayer times & Hijri dates — [Aladhan API](https://aladhan.com/) by Islamic Network
 - Place names — [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/)
 - Typeface — [Cairo](https://fonts.google.com/specimen/Cairo)
+- Adhan recordings — from [aladhan.com/download-adhans](https://aladhan.com/download-adhans)
+  (Islamic Network): Mishary Rashid Alafasy (three recordings), Ahmad
+  al-Nafees, Hafiz Mustafa Özcan, Karl Jenkins, and Mansour Al-Zahrani.
+  <!-- Their own credits page states the recordings "own and retain their
+       respective copyrights," which by itself isn't a redistribution grant —
+       so permission to bundle them was asked for directly:
+       https://community.islamic.network/d/264-permission-to-bundle-adhan-audio-in-a-published-free-android-app
+       Confirmed by Islamic Network community staff (account "gokboru",
+       replying to a question naming this app and package by name): "the
+       files are available anyone to use as they see fit... There are no
+       attribution requirements per se." Screenshot on file, dated 5 Aug
+       2026. Consistent with a separate answer given to a different developer
+       asking the same question in an earlier thread (account "meezaan", 8
+       May 2026). -->
 
 ---
 
