@@ -95,6 +95,29 @@ flutter:
     - assets/ka3baInCompass.svg
     - assets/arrow.svg
     - assets/settingsIcon.svg
+    # .png, not .svg: the source is a Figma "flatten to bitmap" export — a
+    # <pattern>/<use>/<image> indirection wrapping a base64 PNG, not real
+    # vector paths. flutter_svg rendered it blank on device despite the
+    # elements nominally being supported, so it's shipped as what it actually
+    # is and tinted via Image.asset's own color/colorBlendMode instead of
+    # SvgPicture's colorFilter. See the icon's call site in
+    # PrayerTimeScreen.dart for the tinting.
+    - assets/audioOnIcon.png
+    - assets/audioOffIcon.png
+    - assets/vibrationIcon.png
+    # Same reasoning and same tinting approach as the two above.
+    - assets/calculatorIcon.png
+    - assets/directoryIcon.png
+    - assets/editIcon.png
+    - assets/locationIcon.png
+    - assets/shareIcon.png
+    - assets/starIcon.png
+    - assets/timerIcon.png
+    - assets/widgetsIcon.png
+    - assets/chevronIcon.png
+    - assets/popupIcon.png
+    - assets/privacyIcon.png
+    - assets/batteryWarningIcon.png
     - assets/github.svg
     - assets/mainIcon.png
     # Only the compass tick effects. The three Adhan recordings that used to be

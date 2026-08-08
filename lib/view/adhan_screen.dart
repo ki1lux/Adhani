@@ -249,7 +249,13 @@ class _AdhanScreenState extends ConsumerState<AdhanScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.location_on, color: _mutedColor, size: 14),
+        Image.asset(
+          'assets/locationIcon.png',
+          width: 14,
+          height: 14,
+          color: _mutedColor,
+          colorBlendMode: BlendMode.srcIn,
+        ),
         const SizedBox(width: 4),
         Text(
           label,

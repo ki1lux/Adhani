@@ -120,29 +120,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                       _sectionLabel('التنبيهات'),
                       _buildSwitchRow(
-                        Icons.timer_outlined,
+                        _assetIcon('assets/timerIcon.png'),
                         'إشعار العدّاد الدائم',
                         _countdownEnabled,
                         _setCountdownEnabled,
                         subtitle: 'يعرض الوقت المتبقي للصلاة القادمة',
                       ),
                       _buildRow(
-                        Icons.info_outline,
+                        _assetIcon('assets/popupIcon.png'),
                         'حالة التنبيهات',
                         _showAlarmStatusDialog,
                       ),
                       _buildRow(
-                        Icons.build_outlined,
+                        // No matching custom icon provided for this row.
+                        _matIcon(Icons.build_outlined),
                         'إصلاح مشاكل التنبيه',
                         _showTroubleshootDialog,
                       ),
                       _buildRow(
-                        Icons.battery_alert_outlined,
+                        _assetIcon('assets/batteryWarningIcon.png'),
                         'تعطيل تحسين البطارية',
                         _openBatteryOptimizationSettings,
                       ),
                       _buildRow(
-                        Icons.widgets_outlined,
+                        _assetIcon('assets/widgetsIcon.png'),
                         'تحديث الودجت الآن',
                         _refreshWidget,
                       ),
@@ -150,7 +151,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       const SizedBox(height: 24),
                       _sectionLabel('مواقيت الصلاة'),
                       _buildRow(
-                        Icons.calculate_outlined,
+                        _assetIcon('assets/calculatorIcon.png'),
                         'طريقة الحساب',
                         _showCalculationMethodDialog,
                       ),
@@ -158,18 +159,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       const SizedBox(height: 24),
                       _sectionLabel('التطبيق'),
                       _buildRow(
-                        Icons.share_outlined,
+                        _assetIcon('assets/shareIcon.png'),
                         'مشاركة التطبيق',
                         _shareApp,
                       ),
-                      _buildRow(Icons.star_outline, 'تقييم التطبيق', _rateApp),
                       _buildRow(
-                        Icons.privacy_tip_outlined,
+                        _assetIcon('assets/starIcon.png'),
+                        'تقييم التطبيق',
+                        _rateApp,
+                      ),
+                      _buildRow(
+                        _assetIcon('assets/privacyIcon.png'),
                         'سياسة الخصوصية',
                         _openPrivacyPolicy,
                       ),
                       _buildRow(
-                        Icons.source_outlined,
+                        _assetIcon('assets/directoryIcon.png'),
                         'مصادر البيانات',
                         _showDataSourcesDialog,
                       ),
@@ -223,7 +228,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildRow(IconData icon, String title, VoidCallback onTap) {
+  /// A row's leading Material icon, sized/tinted to match [_assetIcon] below
+  /// — so a row can be switched between the two without its glyph's size or
+  /// color shifting.
+  Widget _matIcon(IconData icon) =>
+      Icon(icon, color: AppColors.secondary, size: 22);
+
+  /// A row's leading custom icon (DESIGN_IDENTITY.md: solid white PNG
+  /// silhouettes — see pubspec.yaml for why these ship as .png, not .svg).
+  /// Tinted the same way `Icon()` is, via Image.asset's own color +
+  /// colorBlendMode rather than a ColorFilter/SvgPicture.
+  Widget _assetIcon(String assetPath, {double size = 22}) => Image.asset(
+    assetPath,
+    width: size,
+    height: size,
+    color: AppColors.secondary,
+    colorBlendMode: BlendMode.srcIn,
+  );
+
+  Widget _buildRow(Widget icon, String title, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
@@ -240,7 +263,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             child: Row(
               children: [
-                Icon(icon, color: AppColors.secondary, size: 22),
+                icon,
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
@@ -253,10 +276,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_left,
-                  color: AppColors.faint,
-                  size: 20,
+                // chevronIcon.png points right (like its source name says);
+                // Icons.chevron_left pointed left because this Row sits
+                // inside a `Directionality(rtl)` ancestor, where the last
+                // child in a Row renders at the visual *left* edge — so a
+                // left-pointing glyph there reads as "continue reading
+                // forward" in RTL. Swapping the raster in without
+                // accounting for that would have flipped every disclosure
+                // arrow in Settings to point the wrong way. `Transform.flip`
+                // mirrors it losslessly since it's a flat solid silhouette,
+                // rather than needing a second, mirrored asset.
+                Transform.flip(
+                  flipX: true,
+                  child: Image.asset(
+                    'assets/chevronIcon.png',
+                    width: 20,
+                    height: 20,
+                    color: AppColors.faint,
+                    colorBlendMode: BlendMode.srcIn,
+                  ),
                 ),
               ],
             ),
@@ -267,7 +305,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _buildSwitchRow(
-    IconData icon,
+    Widget icon,
     String title,
     bool value,
     ValueChanged<bool> onChanged, {
@@ -288,7 +326,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
           child: Row(
             children: [
-              Icon(icon, color: AppColors.secondary, size: 22),
+              icon,
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -895,10 +933,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.battery_alert_outlined,
+                Image.asset(
+                  'assets/batteryWarningIcon.png',
+                  width: 44,
+                  height: 44,
                   color: AppColors.accent,
-                  size: 44,
+                  colorBlendMode: BlendMode.srcIn,
                 ),
                 const SizedBox(height: 16),
                 const Text(

@@ -97,6 +97,13 @@ class PrayerAlarmScheduler {
       final soundName = prefs.getString('adhan_sound_$name') ?? 'adhan1';
       await prefs.setString('adhan_sound_$name', soundName);
 
+      // Vibrate-only prayers still schedule an alarm — `PrayerAlarmReceiver`
+      // is what decides to buzz rather than play, so the alarm has to exist
+      // to reach that decision. It only changes the *fallback* below.
+      // (Key mirrored in PrayerAlarmReceiver.kt and PrayerTimeScreen.dart's
+      // `_AdhanAlertMode` — see CLAUDE.md on this cross-language contract.)
+      final vibrateOnly = prefs.getBool('adhan_vibrate_$name') ?? false;
+
       // Schedule 4-minute reminder notification before each prayer
       final reminderTime = scheduledTime.subtract(const Duration(minutes: 4));
       if (reminderTime.isAfter(now)) {
@@ -111,15 +118,18 @@ class PrayerAlarmScheduler {
           'triggerAtMillis': scheduledTime.millisecondsSinceEpoch,
         });
       } catch (e) {
-        logWarning('Native alarm failed for $name — using notification sound');
-        // Fallback: schedule a Flutter notification WITH sound.
+        logWarning('Native alarm failed for $name — falling back');
+        // Fallback: a Flutter notification. Silent for a vibrate-only prayer
+        // — the whole point of that mode is that the recording doesn't play,
+        // and a fallback that ignores it would be the one path where a muted
+        // prayer suddenly announces itself out loud.
         await _scheduleLocalNotification(
           id,
           name,
           timeStr,
           scheduledTime,
           soundName,
-          withSound: true,
+          withSound: !vibrateOnly,
         );
       }
     }

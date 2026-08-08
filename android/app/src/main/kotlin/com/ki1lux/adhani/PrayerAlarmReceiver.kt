@@ -54,9 +54,28 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             Log.d(TAG, "Adhan disabled for $prayerName, skipping")
             return
         }
-        
+
+        // Vibrate instead of playing the Adhan.
+        //
+        // Two independent keys rather than one three-valued one, because
+        // `adhan_enabled_*` already gates alarm *scheduling* in
+        // AlarmSchedulerHelper — folding "vibrate" into it would have meant
+        // either no alarm being armed (so nothing to vibrate) or teaching the
+        // scheduler a third state it doesn't otherwise care about. It also
+        // keeps the pref backward compatible: an install that predates this
+        // has no `adhan_vibrate_*` key, defaults to false, and behaves
+        // exactly as it did. Mirrors `_AdhanAlertMode` in
+        // lib/view/PrayerTimeScreen.dart — see CLAUDE.md on this contract.
+        val vibrateOnly = prefs.getBoolean("flutter.adhan_vibrate_$prayerName", false)
+        if (vibrateOnly) {
+            Log.d(TAG, "Vibrate mode for $prayerName — buzzing instead of playing")
+            AdhanVibrator.alert(context, prayerName, prayerTime)
+            PrayerCountdownService.startIfNeeded(context)
+            return
+        }
+
         Log.d(TAG, "Prayer: $prayerName, Time: $prayerTime, Sound: $soundName")
-        
+
         // Start the AdhanAlarmService which plays audio + shows notification
         val serviceIntent = Intent(context, AdhanAlarmService::class.java).apply {
             putExtra("prayerName", prayerName)

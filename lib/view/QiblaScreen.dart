@@ -37,6 +37,25 @@ class _QiblaScreenState extends State<QiblaScreen> {
   bool _hasPermission = false;
   bool _loading = true;
   bool _isCompassSupported = true;
+
+  /// The sensor is nominally there, but nothing usable is coming out of it.
+  ///
+  /// Distinct from [_isCompassSupported] on purpose. That one answers "does
+  /// this hardware have a magnetometer at all", which is a question the
+  /// platform can be asked. This one covers every way that answer can be yes
+  /// and the compass still not work: the plugin's support probe returning
+  /// `null` rather than a bool, the stream erroring, or — the common one on
+  /// cheap hardware — a magnetometer the OS reports but which never actually
+  /// emits a reading. Without this the screen sat on a bare spinner forever,
+  /// with nothing on screen to explain it and no way to retry.
+  bool _sensorUnavailable = false;
+
+  /// How long to wait for the *first* reading before treating the compass as
+  /// unavailable. Generous: a cold magnetometer on a slow device can take a
+  /// couple of seconds, and a false "no compass" is worse than a slow one.
+  static const _firstReadingGrace = Duration(seconds: 6);
+  Timer? _firstReadingTimeout;
+
   double _lastDirection = 0;
   int _lastHapticTime = 0;
   bool _wasPointingToQibla = false;
@@ -53,6 +72,10 @@ class _QiblaScreenState extends State<QiblaScreen> {
   bool _isPlayingBigTick = false;
 
   double? _distanceToMeccaKm;
+
+  /// Bearing to the Kaaba computed from coordinates alone — no sensor.
+  /// See [_loadDistanceToMecca]; it's what keeps the no-compass state useful.
+  double? _qiblaBearingFromCoordinates;
 
   /// Compass render throttle — see [_startCompass].
   static const _minRenderIntervalMs = 16; // ~60 fps
@@ -72,9 +95,13 @@ class _QiblaScreenState extends State<QiblaScreen> {
 
   double _degToRad(double deg) => deg * pi / 180.0;
 
-  // Haversine distance, using the same cached last_latitude/last_longitude
-  // every other screen already reads (written by PrayerTimeScreen's location
-  // flow) — no new GPS/geocoding call of its own.
+  // Haversine distance + great-circle bearing, using the same cached
+  // last_latitude/last_longitude every other screen already reads (written by
+  // PrayerTimeScreen's location flow) — no new GPS/geocoding call of its own.
+  //
+  // The bearing matters beyond decoration: it needs no magnetometer at all, so
+  // it is what the compass-unavailable state can still show a user whose
+  // hardware can't do the live dial.
   Future<void> _loadDistanceToMecca() async {
     final prefs = await SharedPreferences.getInstance();
     final lat = prefs.getDouble('last_latitude');
@@ -92,8 +119,25 @@ class _QiblaScreenState extends State<QiblaScreen> {
             sin(dLon / 2);
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
+    // Initial great-circle bearing from the user to the Kaaba, measured
+    // clockwise from true north. Not the same as a rhumb line — over this
+    // kind of distance the two differ noticeably, and the great circle is
+    // what "facing the Kaaba" actually means.
+    final phi1 = _degToRad(lat);
+    final phi2 = _degToRad(_kaabaLat);
+    final deltaLambda = _degToRad(_kaabaLon - lon);
+    final y = sin(deltaLambda) * cos(phi2);
+    final x =
+        cos(phi1) * sin(phi2) -
+        sin(phi1) * cos(phi2) * cos(deltaLambda);
+    // atan2 returns -pi..pi; shift into a 0-360 compass bearing.
+    final bearing = (atan2(y, x) * 180.0 / pi + 360.0) % 360.0;
+
     if (mounted) {
-      setState(() => _distanceToMeccaKm = earthRadiusKm * c);
+      setState(() {
+        _distanceToMeccaKm = earthRadiusKm * c;
+        _qiblaBearingFromCoordinates = bearing;
+      });
     }
   }
 
@@ -125,30 +169,77 @@ class _QiblaScreenState extends State<QiblaScreen> {
     // order of magnitude with no visible change in smoothness — and stops the
     // compass tab from being the app's biggest CPU (and therefore battery)
     // consumer while it's open.
-    _compassSubscription ??= _controller.getQiblaStream().listen((data) {
-      if (!mounted) return;
-      final direction = data as QiblahDirection;
+    // Nothing below proves a reading will ever arrive, so start the clock now
+    // and let the first sample cancel it.
+    _armFirstReadingTimeout();
 
-      final now = DateTime.now();
-      final sinceLastFrame =
-          now.difference(_lastRenderedAt).inMilliseconds;
-      final movedEnough =
-          _qiblahDirection == null ||
-          (direction.direction - _qiblahDirection!.direction).abs() >=
-              _minRenderDeltaDegrees;
+    _compassSubscription ??= _controller.getQiblaStream().listen(
+      (data) {
+        if (!mounted) return;
 
-      if (sinceLastFrame >= _minRenderIntervalMs && movedEnough) {
-        _lastRenderedAt = now;
-        setState(() => _qiblahDirection = direction);
-      }
+        // A reading did arrive: the sensor works, whatever the support probe
+        // said. Clear both the deadline and any earlier verdict.
+        _firstReadingTimeout?.cancel();
+        _firstReadingTimeout = null;
+        if (_sensorUnavailable) {
+          setState(() => _sensorUnavailable = false);
+        }
 
-      // Audio cues are driven off every sample: they trigger on crossings,
-      // which a throttled stream could step straight over.
-      _processCompassAudio(direction);
+        final direction = data as QiblahDirection;
+
+        final now = DateTime.now();
+        final sinceLastFrame = now.difference(_lastRenderedAt).inMilliseconds;
+        final movedEnough =
+            _qiblahDirection == null ||
+            (direction.direction - _qiblahDirection!.direction).abs() >=
+                _minRenderDeltaDegrees;
+
+        if (sinceLastFrame >= _minRenderIntervalMs && movedEnough) {
+          _lastRenderedAt = now;
+          setState(() => _qiblahDirection = direction);
+        }
+
+        // Audio cues are driven off every sample: they trigger on crossings,
+        // which a throttled stream could step straight over.
+        _processCompassAudio(direction);
+      },
+      // Without this, a stream error became an unhandled async exception and
+      // the screen simply kept spinning.
+      onError: (Object e) {
+        logDebug('Qibla stream error: $e');
+        _markSensorUnavailable();
+      },
+      onDone: () {
+        // The stream closing before ever producing a heading is the same
+        // outcome as never emitting.
+        if (_qiblahDirection == null) _markSensorUnavailable();
+      },
+    );
+  }
+
+  void _armFirstReadingTimeout() {
+    _firstReadingTimeout?.cancel();
+    // Already have a heading from an earlier visit to this tab — nothing to
+    // wait for.
+    if (_qiblahDirection != null) return;
+    _firstReadingTimeout = Timer(_firstReadingGrace, () {
+      if (_qiblahDirection == null) _markSensorUnavailable();
+    });
+  }
+
+  void _markSensorUnavailable() {
+    _firstReadingTimeout?.cancel();
+    _firstReadingTimeout = null;
+    if (!mounted || _sensorUnavailable) return;
+    setState(() {
+      _sensorUnavailable = true;
+      _loading = false;
     });
   }
 
   void _stopCompass() {
+    _firstReadingTimeout?.cancel();
+    _firstReadingTimeout = null;
     _compassSubscription?.cancel();
     _compassSubscription = null;
   }
@@ -197,6 +288,8 @@ class _QiblaScreenState extends State<QiblaScreen> {
 
   @override
   void dispose() {
+    // _stopCompass cancels the first-reading timer too, so a pending deadline
+    // can't fire setState after the screen is gone.
     _stopCompass();
     _audioPlayer.dispose();
     _bigAudioPlayer.dispose();
@@ -204,8 +297,30 @@ class _QiblaScreenState extends State<QiblaScreen> {
   }
 
   Future<void> _checkPermission() async {
+    // Re-entrant: the retry buttons call straight back into this, so clear
+    // the previous verdict rather than leaving a stale "unavailable" behind.
+    if (mounted) {
+      setState(() {
+        _sensorUnavailable = false;
+        _loading = true;
+      });
+    }
+
     // 1. Check if compass is supported (Android specific check, returns true on iOS)
-    final bool? isSupported = await FlutterQiblah.androidDeviceSensorSupport();
+    //
+    // Wrapped: this is a platform call and it can throw. It used to be
+    // unguarded, so a PlatformException escaped `_checkPermission` entirely,
+    // `_loading` was never set false, and the screen stayed on "جاري
+    // التحميل..." forever with no way out.
+    bool? isSupported;
+    try {
+      isSupported = await FlutterQiblah.androidDeviceSensorSupport();
+    } catch (e) {
+      logDebug('Compass support probe failed: $e');
+      _markSensorUnavailable();
+      return;
+    }
+
     if (isSupported == false) {
       if (mounted) {
         setState(() {
@@ -215,6 +330,10 @@ class _QiblaScreenState extends State<QiblaScreen> {
       }
       return;
     }
+    // `null` is neither yes nor no — it means the probe couldn't answer. We
+    // carry on and let the first-reading deadline in _startCompass decide,
+    // rather than either blocking a working compass or promising one that
+    // isn't there.
 
     // 2. Check if we already have permission
     bool granted = await _controller.hasPermission();
@@ -237,10 +356,14 @@ class _QiblaScreenState extends State<QiblaScreen> {
     if (mounted) {
       setState(() {
         _hasPermission = granted;
-        _isCompassSupported = true;
+        // Only what the probe actually said. This used to be a flat `= true`,
+        // which overwrote a genuine "no sensor" verdict from step 1 on the
+        // way past — so a device with no magnetometer could still end up on
+        // the compass screen instead of the explanatory one.
+        _isCompassSupported = isSupported != false;
         _loading = false;
       });
-      
+
       // Start compass only if we have permission, it's supported, and screen is active
       if (_hasPermission && widget.isActive) {
         _startCompass();
@@ -280,32 +403,27 @@ class _QiblaScreenState extends State<QiblaScreen> {
       );
     }
 
+    // The hardware genuinely has no magnetometer. Nothing to retry, so this
+    // state deliberately offers no retry button — it points at the one thing
+    // that still works instead.
     if (!_isCompassSupported) {
-      return Scaffold(
-        backgroundColor: AppColors.surface,
-        body: const AppBackground(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, color: AppColors.label, size: 56),
-                SizedBox(height: 16),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    "جهازك لا يحتوي على مستشعر البوصلة",
-                    style: TextStyle(
-                      color: AppColors.body,
-                      fontSize: 16,
-                      fontFamily: 'cairo',
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      return _buildUnavailableState(
+        message: 'جهازك لا يحتوي على مستشعر البوصلة',
+        detail: 'لا يزال بإمكانك معرفة اتجاه القبلة بالدرجات أدناه',
+        showRetry: false,
+      );
+    }
+
+    // The sensor is reportedly there but produced nothing — a failed probe, a
+    // stream error, or six seconds of silence. Retryable, because all three of
+    // those can be transient.
+    if (_sensorUnavailable && _qiblahDirection == null) {
+      return _buildUnavailableState(
+        message: 'تعذّر تشغيل البوصلة',
+        detail:
+            'قد لا يدعم جهازك البوصلة، أو يحتاج المستشعر إلى معايرة. '
+            'حرّك هاتفك على شكل رقم ٨ ثم أعد المحاولة.',
+        showRetry: true,
       );
     }
 
@@ -436,6 +554,125 @@ class _QiblaScreenState extends State<QiblaScreen> {
                   ],
                 );
               },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Shared "the compass can't run" screen.
+  ///
+  /// One widget for both causes (no magnetometer at all, and a magnetometer
+  /// that won't talk) because from the user's side they're the same problem —
+  /// only [showRetry] differs, since retrying missing hardware is pointless.
+  ///
+  /// Deliberately not a dead end: the Qibla *bearing* is pure spherical
+  /// trigonometry from the user's coordinates, so it's still computable with
+  /// no sensor whatsoever. A user with a broken compass can point their phone
+  /// using any other compass, or just read the degrees.
+  Widget _buildUnavailableState({
+    required String message,
+    required String detail,
+    required bool showRetry,
+  }) {
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      body: AppBackground(
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.explore_off_outlined,
+                    color: AppColors.label,
+                    size: 56,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      color: AppColors.body,
+                      fontSize: 17,
+                      fontFamily: 'cairo',
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                    textDirection: TextDirection.rtl,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    detail,
+                    style: const TextStyle(
+                      color: AppColors.secondary,
+                      fontSize: 14,
+                      fontFamily: 'cairo',
+                      height: 1.7,
+                    ),
+                    textAlign: TextAlign.center,
+                    textDirection: TextDirection.rtl,
+                  ),
+                  if (_qiblaBearingFromCoordinates != null) ...[
+                    const SizedBox(height: 28),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.barFill,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.cardBorder),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'اتجاه القبلة من موقعك',
+                            style: TextStyle(
+                              fontFamily: 'cairo',
+                              fontSize: 13,
+                              color: AppColors.secondary,
+                            ),
+                            textDirection: TextDirection.rtl,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${_qiblaBearingFromCoordinates!.round()}°',
+                            style: const TextStyle(
+                              fontFamily: 'cairo',
+                              fontSize: 30,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.body,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'من الشمال، باتجاه عقارب الساعة',
+                            style: TextStyle(
+                              fontFamily: 'cairo',
+                              fontSize: 12,
+                              color: AppColors.faint,
+                            ),
+                            textDirection: TextDirection.rtl,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (showRetry) ...[
+                    const SizedBox(height: 28),
+                    _FilledAction(
+                      icon: Icons.refresh,
+                      label: 'إعادة المحاولة',
+                      onTap: _checkPermission,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),

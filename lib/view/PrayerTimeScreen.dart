@@ -208,13 +208,75 @@ class PrayerTimeScreen extends ConsumerStatefulWidget {
 /// `adhan_enabled_*` / `adhan_sound_*` preference-key suffixes.
 const _prayerNames = ['الفجر', 'الظهر', 'العصر', 'المغرب', 'العشاء'];
 
+/// How a prayer announces itself: the Adhan, a vibration, or nothing.
+///
+/// Stored as **two** booleans rather than one three-valued key, and the split
+/// is deliberate. `adhan_enabled_*` already gates whether an alarm is armed at
+/// all (`AlarmSchedulerHelper.rescheduleAllFromPrefs` on the native side skips
+/// disabled prayers entirely), so [vibrate] has to keep it `true` — otherwise
+/// there'd be no alarm left to vibrate from. `adhan_vibrate_*` then chooses
+/// what happens once it fires.
+///
+/// The split also means installs that predate this feature carry no
+/// `adhan_vibrate_*` key at all, read `false`, and behave exactly as before.
+///
+/// **`PrayerAlarmReceiver.kt` reads both keys by these exact names.** Nothing
+/// checks that across the language boundary — see CLAUDE.md.
+enum _AdhanAlertMode {
+  sound,
+  vibrate,
+  silent;
+
+  static _AdhanAlertMode from({required bool enabled, required bool vibrate}) {
+    if (!enabled) return _AdhanAlertMode.silent;
+    return vibrate ? _AdhanAlertMode.vibrate : _AdhanAlertMode.sound;
+  }
+
+  bool get enabled => this != _AdhanAlertMode.silent;
+
+  /// Named to avoid colliding with the [vibrate] enum value itself, and to
+  /// match `vibrateOnly` in PrayerAlarmReceiver.kt.
+  bool get vibrateOnly => this == _AdhanAlertMode.vibrate;
+
+  /// Tapping the row's icon walks sound → vibrate → silent → sound, the same
+  /// order (and the same direction) as a phone's own ringer-mode key, so the
+  /// control behaves the way the gesture already implies.
+  _AdhanAlertMode get next => switch (this) {
+    _AdhanAlertMode.sound => _AdhanAlertMode.vibrate,
+    _AdhanAlertMode.vibrate => _AdhanAlertMode.silent,
+    _AdhanAlertMode.silent => _AdhanAlertMode.sound,
+  };
+
+  String get iconAsset => switch (this) {
+    _AdhanAlertMode.sound => 'assets/audioOnIcon.png',
+    _AdhanAlertMode.vibrate => 'assets/vibrationIcon.png',
+    _AdhanAlertMode.silent => 'assets/audioOffIcon.png',
+  };
+
+  /// Spoken by TalkBack, and the reason the row is more than a mute toggle —
+  /// it has to say which of the three states is current, not just on/off.
+  String semanticsLabel(String prayerName) => switch (this) {
+    _AdhanAlertMode.sound => 'أذان $prayerName: صوت. اضغط للاهتزاز',
+    _AdhanAlertMode.vibrate => 'أذان $prayerName: اهتزاز. اضغط للكتم',
+    _AdhanAlertMode.silent => 'أذان $prayerName: صامت. اضغط للصوت',
+  };
+
+  /// Confirmation toast copy, so the change is legible without the user
+  /// having to interpret a small glyph that just swapped.
+  String toastFor(String prayerName) => switch (this) {
+    _AdhanAlertMode.sound => 'سيؤذّن $prayerName بالصوت',
+    _AdhanAlertMode.vibrate => 'سينبّه $prayerName بالاهتزاز',
+    _AdhanAlertMode.silent => 'تم كتم أذان $prayerName',
+  };
+}
+
 class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
   static const _nativeChannel = MethodChannel('com.myadhan/notification');
 
   String _countryText = 'الموقع...';
   String _cityText = '';
 
-  /// Per-prayer Adhan on/off, mirrored into state.
+  /// Per-prayer alert mode (sound / vibrate / silent), mirrored into state.
   ///
   /// This used to be five `Future<bool>`s handed to five `FutureBuilder`s —
   /// but they were *created inside `build`*, so every rebuild of this screen
@@ -224,7 +286,7 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
   /// its `?? true` default and visibly flickered from muted to unmuted and
   /// back on every one of those rebuilds. Reading once and keeping the answer
   /// removes both the flicker and the repeated async platform reads.
-  Map<String, bool> _adhanEnabled = const {};
+  Map<String, _AdhanAlertMode> _alertModes = const {};
 
   @override
   void initState() {
@@ -233,16 +295,44 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
     _refreshAdhanFlags();
   }
 
-  /// Re-reads every `adhan_enabled_*` flag and rebuilds with the result.
-  /// Called on entry and after anything that writes one of them.
+  /// Re-reads every `adhan_enabled_*` / `adhan_vibrate_*` pair and rebuilds
+  /// with the result. Called on entry and after anything that writes them.
   Future<void> _refreshAdhanFlags() async {
     final prefs = await SharedPreferences.getInstance();
-    final flags = {
+    final modes = {
       for (final name in _prayerNames)
-        name: prefs.getBool('adhan_enabled_$name') ?? true,
+        name: _AdhanAlertMode.from(
+          enabled: prefs.getBool('adhan_enabled_$name') ?? true,
+          vibrate: prefs.getBool('adhan_vibrate_$name') ?? false,
+        ),
     };
     if (!mounted) return;
-    setState(() => _adhanEnabled = flags);
+    setState(() => _alertModes = modes);
+  }
+
+  /// Writes both halves of [mode] for [prayerName] and re-arms the alarms.
+  ///
+  /// Both keys are always written, never just the one that changed: leaving a
+  /// stale `adhan_vibrate_*` behind is how "silent" would come back as
+  /// "vibrate" the next time the prayer was re-enabled.
+  Future<void> _setAlertMode(String prayerName, _AdhanAlertMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('adhan_enabled_$prayerName', mode.enabled);
+    await prefs.setBool('adhan_vibrate_$prayerName', mode.vibrateOnly);
+
+    await _refreshAdhanFlags();
+
+    // Re-arm so the native side picks the change up immediately rather than
+    // at the next day rollover.
+    final prayerTimesAsync = ref.read(prayerTimesProvider);
+    if (prayerTimesAsync.hasValue) {
+      await PrayerAlarmScheduler.scheduleAllPrayersWithData(
+        prayerTimesAsync.value!,
+      );
+    }
+
+    if (!mounted) return;
+    AppToast.success(context, mode.toastFor(prayerName));
   }
 
   /// Nominatim's usage policy asks every client for a User-Agent that
@@ -626,10 +716,12 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const Icon(
-                      Icons.location_on,
+                    Image.asset(
+                      'assets/locationIcon.png',
+                      width: 32,
+                      height: 32,
                       color: AppColors.body,
-                      size: 32,
+                      colorBlendMode: BlendMode.srcIn,
                     ),
                     const SizedBox(width: 10),
                     Flexible(
@@ -665,6 +757,19 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                               Container(
                                 width: 26,
                                 height: 26,
+                                // Load-bearing, not cosmetic. A sized
+                                // Container passes *tight* constraints down,
+                                // and an Image sizes itself from its
+                                // constraints — so `width: 14` below was
+                                // being overridden and the pen rendered at
+                                // the full 26x26, filling the badge. Setting
+                                // an alignment is what makes Container loosen
+                                // the child's constraints so its own size is
+                                // honoured. The Icon this replaced never hit
+                                // this: an icon's glyph is sized by fontSize,
+                                // not by layout, so it ignored the tight
+                                // constraint entirely.
+                                alignment: Alignment.center,
                                 decoration: BoxDecoration(
                                   color: AppColors.accentFillSoft,
                                   borderRadius: BorderRadius.circular(9),
@@ -672,10 +777,12 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                     color: AppColors.accentBorderSoft,
                                   ),
                                 ),
-                                child: const Icon(
-                                  Icons.edit,
+                                child: Image.asset(
+                                  'assets/editIcon.png',
+                                  width: 14,
+                                  height: 14,
                                   color: AppColors.heading,
-                                  size: 14,
+                                  colorBlendMode: BlendMode.srcIn,
                                 ),
                               ),
                             ],
@@ -970,10 +1077,13 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
                                             ),
                                             child: Row(
                                               children: [
-                                                const Icon(
-                                                  Icons.location_on,
+                                                Image.asset(
+                                                  'assets/locationIcon.png',
+                                                  width: 20,
+                                                  height: 20,
                                                   color: AppColors.secondary,
-                                                  size: 20,
+                                                  colorBlendMode:
+                                                      BlendMode.srcIn,
                                                 ),
                                                 const SizedBox(width: 10),
                                                 Expanded(
@@ -1134,19 +1244,10 @@ class _PrayerTimeState extends ConsumerState<PrayerTimeScreen> {
       time: time,
       isNext: isNext,
       isPassed: isPassed,
-      isAdhanEnabled: _adhanEnabled[name] ?? true,
+      alertMode: _alertModes[name] ?? _AdhanAlertMode.sound,
       onSoundTap: () => _showSoundDialog(name),
-      onToggleAdhan: (enabled) async {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('adhan_enabled_$name', enabled);
-        await _refreshAdhanFlags(); // Refresh parent list
-        final prayerTimesAsync = ref.read(prayerTimesProvider);
-        if (prayerTimesAsync.hasValue) {
-          await PrayerAlarmScheduler.scheduleAllPrayersWithData(
-            prayerTimesAsync.value!,
-          );
-        }
-      },
+      onCycleAlertMode:
+          (mode) => _setAlertMode(name, mode),
       onFinishCountdown: () {
         setState(() {}); // Rebuild the whole screen to move the active card!
       },
@@ -1511,9 +1612,9 @@ class _AnimatedPrayerCard extends StatefulWidget {
   final String time;
   final bool isNext;
   final bool isPassed;
-  final bool isAdhanEnabled;
+  final _AdhanAlertMode alertMode;
   final VoidCallback onSoundTap;
-  final ValueChanged<bool> onToggleAdhan;
+  final ValueChanged<_AdhanAlertMode> onCycleAlertMode;
   final VoidCallback onFinishCountdown;
 
   const _AnimatedPrayerCard({
@@ -1521,9 +1622,9 @@ class _AnimatedPrayerCard extends StatefulWidget {
     required this.time,
     required this.isNext,
     required this.isPassed,
-    required this.isAdhanEnabled,
+    required this.alertMode,
     required this.onSoundTap,
-    required this.onToggleAdhan,
+    required this.onCycleAlertMode,
     required this.onFinishCountdown,
   });
 
@@ -1603,19 +1704,36 @@ class _AnimatedPrayerCardState extends State<_AnimatedPrayerCard> {
           ),
           Semantics(
             button: true,
-            label:
-                widget.isAdhanEnabled
-                    ? 'كتم أذان ${widget.name}'
-                    : 'تفعيل أذان ${widget.name}',
+            // Three states, so "mute/unmute" no longer describes it — the
+            // label has to say which one is current and what a tap does next.
+            label: widget.alertMode.semanticsLabel(widget.name),
             child: GestureDetector(
-              onTap: () => widget.onToggleAdhan(!widget.isAdhanEnabled),
+              onTap: () => widget.onCycleAlertMode(widget.alertMode.next),
               child: Padding(
                 // 24px icon + 12px padding on every side = 48x48,
                 // the accessibility minimum touch target.
                 padding: const EdgeInsets.all(12),
-                child: Icon(
-                  widget.isAdhanEnabled ? Icons.volume_up : Icons.volume_off,
-                  color: widget.isAdhanEnabled ? contentColor : AppColors.label,
+                // Cross-fades between the three glyphs instead of hard-cutting
+                // — the row already fades its own state changes, and a bare
+                // swap next to that read as a glitch.
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Image.asset(
+                    widget.alertMode.iconAsset,
+                    key: ValueKey(widget.alertMode),
+                    width: 24,
+                    height: 24,
+                    // Image.asset's own tinting, not SvgPicture's colorFilter
+                    // — these are PNGs (see pubspec.yaml for why), and this is
+                    // the directly-analogous API: BlendMode.srcIn replaces
+                    // color wherever the source's alpha is non-zero, exactly
+                    // like the old Icon() and the SvgPicture attempt before it.
+                    color:
+                        widget.alertMode == _AdhanAlertMode.silent
+                            ? AppColors.label
+                            : contentColor,
+                    colorBlendMode: BlendMode.srcIn,
+                  ),
                 ),
               ),
             ),
