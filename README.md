@@ -150,9 +150,14 @@ Adhani/
 
 ## Screenshots
 
-| Home | Qibla Compass | Prayer Times |
+| Home | Prayer Times | Qibla Compass | Settings |
 |:---:|:---:|:---:|
-| <img width="240" alt="Home screen with analog clock and next prayer countdown" src="https://github.com/user-attachments/assets/7af0c2a4-e038-441b-b7c2-208165dbd679" /> | <img width="240" alt="Qibla compass" src="https://github.com/user-attachments/assets/ddc2f61b-c534-4069-b469-473760e41c7e" /> | <img width="240" alt="Daily prayer times list" src="https://github.com/user-attachments/assets/9207f318-b1ca-4633-b55d-c2d7eec5aa09" /> |
+| <img width="1170" height="2532" alt="Simulator Screenshot - iPhone 16e - 2026-08-16 at 18 37 28" src="https://github.com/user-attachments/assets/21bac3e7-0608-4ad5-a0bc-29e99fb183d8" />
+ | 
+<img width="1170" height="2532" alt="Simulator Screenshot - iPhone 16e - 2026-08-16 at 18 37 33" src="https://github.com/user-attachments/assets/508fce37-3aa6-472e-82e3-19683bf05c2c" />
+ | <img width="1170" height="2532" alt="Simulator Screenshot - iPhone 16e - 2026-08-16 at 18 37 45" src="https://github.com/user-attachments/assets/7da9ba53-9a0f-45ea-a367-7d5a192023a5" />
+
+ | <img width="1170" height="2532" alt="Simulator Screenshot - iPhone 16e - 2026-08-16 at 18 38 18" src="https://github.com/user-attachments/assets/504fe62a-8975-4437-88e1-335cef210052" /> |
 
 ## Getting Started
 
